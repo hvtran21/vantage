@@ -16,7 +16,39 @@ export const BASE_URL = process.env.EXPO_PUBLIC_BASE_URL || 'http://localhost:80
 const NOT_BLOCKED =
     'NOT EXISTS (SELECT 1 FROM blocked_sources b WHERE b.source_domain = articles.source_domain)';
 
-export async function syncArticles(genre?: string, category?: string, cursor?: string, token?: string) {
+/**
+ * Position in the local feed, by value rather than by row count.
+ *
+ * OFFSET counts rows, so anything that removes one -- blocking a publisher
+ * purges its cached articles -- silently shifts every later page and the reader
+ * skips whatever moved across the boundary. A keyset cursor names the last row
+ * seen, so it stays correct even when that row itself is deleted.
+ */
+export type LocalCursor = { publishedAt: string; id: string };
+
+// Total order, matching the API's. COALESCE keeps undated rows sortable and
+// reachable: a bare `published_at < ?` is NULL for them, so they'd be dropped
+// from every page after the first.
+const ORDER_KEY = "COALESCE(published_at, '')";
+const ORDER_BY = `ORDER BY ${ORDER_KEY} DESC, id DESC`;
+const AFTER_CURSOR = `(${ORDER_KEY} < ? OR (${ORDER_KEY} = ? AND id < ?))`;
+
+const cursorClause = (cursor?: LocalCursor) => (cursor ? `AND ${AFTER_CURSOR}` : '');
+const cursorParams = (cursor?: LocalCursor) =>
+    cursor ? [cursor.publishedAt, cursor.publishedAt, cursor.id] : [];
+
+/** The cursor that continues after a page, or undefined if the page was empty. */
+export function cursorAfter(articles: Article[]): LocalCursor | undefined {
+    const last = articles[articles.length - 1];
+    return last ? { publishedAt: last.published_at ?? '', id: last.id } : undefined;
+}
+
+export async function syncArticles(
+    genre?: string,
+    category?: string,
+    cursor?: string,
+    token?: string,
+) {
     try {
         let results = null;
         let nextCursor: string | null = null;
@@ -44,44 +76,46 @@ export async function syncArticles(genre?: string, category?: string, cursor?: s
     }
 }
 
-function shuffle<T>(arr: T[]): T[] {
-    const a = [...arr];
-    for (let i = a.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [a[i], a[j]] = [a[j], a[i]];
-    }
-    return a;
-}
-
+/**
+ * One ordered query rather than one per genre.
+ *
+ * The old shape ran a LIMIT per genre and shuffled the union, so a single
+ * "page" could return limit x genres rows in random order while the caller
+ * advanced by one page -- rows were both duplicated and skipped. Ordering by
+ * recency across all selected genres interleaves them anyway, which is what the
+ * shuffle was there to do.
+ */
 export default async function getArticles(
     genres?: string,
     category?: string,
     limit: number = 20,
-    offset: number = 0,
+    cursor?: LocalCursor,
 ): Promise<Article[] | undefined> {
     const db = await getDb();
 
     if (genres !== undefined && category === undefined) {
-        const genreList = genres.split(',');
-        const results = await Promise.all(
-            genreList.map(async (genre) => {
-                return await db.getAllAsync(
-                    `SELECT * FROM articles WHERE genre = ? AND ${NOT_BLOCKED} LIMIT ? OFFSET ?`,
-                    [genre, limit, offset],
-                );
-            }),
+        const genreList = genres
+            .split(',')
+            .map((genre) => genre.trim())
+            .filter(Boolean);
+        if (genreList.length === 0) return [];
+
+        const placeholders = genreList.map(() => '?').join(', ');
+        return db.getAllAsync<Article>(
+            `SELECT * FROM articles
+             WHERE genre IN (${placeholders}) AND ${NOT_BLOCKED} ${cursorClause(cursor)}
+             ${ORDER_BY} LIMIT ?`,
+            [...genreList, ...cursorParams(cursor), limit],
         );
-        if (results) {
-            return shuffle(results.flat() as Article[]);
-        }
-    } else if (category !== undefined && genres === undefined) {
-        const results = await db.getAllAsync(
-            `SELECT * FROM articles WHERE category = ? AND ${NOT_BLOCKED} LIMIT ? OFFSET ?`,
-            [category, limit, offset],
+    }
+
+    if (category !== undefined && genres === undefined) {
+        return db.getAllAsync<Article>(
+            `SELECT * FROM articles
+             WHERE category = ? AND ${NOT_BLOCKED} ${cursorClause(cursor)}
+             ${ORDER_BY} LIMIT ?`,
+            [category, ...cursorParams(cursor), limit],
         );
-        if (results) {
-            return shuffle(results.flat() as Article[]);
-        }
     }
 }
 
@@ -91,11 +125,16 @@ export async function getSavedArticles(): Promise<Article[]> {
     return (results as Article[]) ?? [];
 }
 
-export async function getAllArticles(limit: number = 100, offset: number = 0): Promise<Article[]> {
+export async function getAllArticles(
+    limit: number = 100,
+    cursor?: LocalCursor,
+): Promise<Article[]> {
     const db = await getDb();
     const results = await db.getAllAsync(
-        `SELECT * FROM articles WHERE ${NOT_BLOCKED} ORDER BY published_at DESC LIMIT ? OFFSET ?`,
-        [limit, offset],
+        `SELECT * FROM articles
+         WHERE ${NOT_BLOCKED} ${cursorClause(cursor)}
+         ${ORDER_BY} LIMIT ?`,
+        [...cursorParams(cursor), limit],
     );
     return (results as Article[]) ?? [];
 }
