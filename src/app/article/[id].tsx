@@ -35,7 +35,10 @@ const fallBackImage = require('@/assets/images/computer_2.jpg');
 
 // Best-effort domain for display only. Falls back to the raw url if parsing fails.
 function getHostname(url: string): string {
-    return url.replace(/^https?:\/\//i, '').replace(/^www\./i, '').split(/[/?#]/)[0];
+    return url
+        .replace(/^https?:\/\//i, '')
+        .replace(/^www\./i, '')
+        .split(/[/?#]/)[0];
 }
 
 export default function ArticleDetail() {
@@ -51,7 +54,9 @@ export default function ArticleDetail() {
     useEffect(() => {
         const loadArticle = async () => {
             const db = await getDb();
-            const result = (await db.getFirstAsync('SELECT * FROM articles WHERE id = ?', [id])) as Article;
+            const result = (await db.getFirstAsync('SELECT * FROM articles WHERE id = ?', [
+                id,
+            ])) as Article;
             if (result) {
                 setArticle(result);
                 setSaved(result.saved === 1);
@@ -106,9 +111,7 @@ export default function ArticleDetail() {
     }
 
     const imageSource =
-        article.url_to_image && !imageError
-            ? { uri: article.url_to_image }
-            : fallBackImage;
+        article.url_to_image && !imageError ? { uri: article.url_to_image } : fallBackImage;
     const date = formatDate(new Date(article.published_at));
     const label = article.genre || article.category || 'Top';
     const topicColor = getTopicColor(label);
@@ -146,7 +149,9 @@ export default function ArticleDetail() {
                         style={styles.meta_container}
                     >
                         <View style={[styles.tag_pill, { backgroundColor: topicColor.bg }]}>
-                            <Text style={[styles.tag_text, { color: topicColor.color }]}>{label}</Text>
+                            <Text style={[styles.tag_text, { color: topicColor.color }]}>
+                                {label}
+                            </Text>
                         </View>
                         <Text style={styles.meta_dot}> </Text>
                         <Text style={styles.meta_date}>{date}</Text>
@@ -211,7 +216,12 @@ export default function ArticleDetail() {
                             onPress={() => setShowBrowserModal(true)}
                             activeOpacity={0.8}
                         >
-                            <FontAwesomeIcon icon={faUpRightFromSquare} size={15} color="white" style={{ marginRight: 10 }} />
+                            <FontAwesomeIcon
+                                icon={faUpRightFromSquare}
+                                size={15}
+                                color="white"
+                                style={{ marginRight: 10 }}
+                            />
                             <Text style={styles.browser_button_text}>Read full article</Text>
                         </TouchableOpacity>
                     </Animated.View>
@@ -263,7 +273,11 @@ export default function ArticleDetail() {
                                 hitSlop={12}
                                 style={styles.modal_close_btn}
                             >
-                                <FontAwesomeIcon icon={faXmark} size={13} color={theme.text_secondary} />
+                                <FontAwesomeIcon
+                                    icon={faXmark}
+                                    size={13}
+                                    color={theme.text_secondary}
+                                />
                             </TouchableOpacity>
 
                             <ScrollView
@@ -272,10 +286,16 @@ export default function ArticleDetail() {
                                 contentContainerStyle={styles.modal_scroll_content}
                             >
                                 <View style={styles.modal_icon_circle}>
-                                    <FontAwesomeIcon icon={faUpRightFromSquare} size={18} color={theme.accent} />
+                                    <FontAwesomeIcon
+                                        icon={faUpRightFromSquare}
+                                        size={18}
+                                        color={theme.accent}
+                                    />
                                 </View>
                                 <Text style={styles.modal_title}>Open article</Text>
-                                <Text style={styles.modal_subtitle}>Opens in an in-app browser:</Text>
+                                <Text style={styles.modal_subtitle}>
+                                    Opens in an in-app browser:
+                                </Text>
 
                                 <View style={styles.modal_url_box}>
                                     <Text style={styles.modal_url_host} numberOfLines={1}>

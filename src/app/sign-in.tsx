@@ -167,7 +167,9 @@ export default function SignInPage() {
 
                             {!pendingVerification && (
                                 <TouchableOpacity
-                                    onPress={() => switchMode(mode === 'sign-in' ? 'sign-up' : 'sign-in')}
+                                    onPress={() =>
+                                        switchMode(mode === 'sign-in' ? 'sign-up' : 'sign-in')
+                                    }
                                     style={styles.toggle}
                                 >
                                     <Text style={styles.toggle_text}>

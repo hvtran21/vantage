@@ -136,21 +136,28 @@ export function initializeDatabase(): Promise<SQLiteDatabase> {
 export async function getUser() {
     const db = await getDb();
     const user = await db.getFirstAsync('SELECT * FROM users LIMIT 1');
-    return user as { id: number; display_name: string | null; email: string | null; avatar_uri: string | null; created_at: string } | null;
+    return user as {
+        id: number;
+        display_name: string | null;
+        email: string | null;
+        avatar_uri: string | null;
+        created_at: string;
+    } | null;
 }
 
 export async function upsertUser(displayName: string, email?: string) {
     const db = await getDb();
     const existing = await db.getFirstAsync('SELECT id FROM users LIMIT 1');
     if (existing) {
-        await db.runAsync(
-            'UPDATE users SET display_name = ?, email = ? WHERE id = ?',
-            [displayName, email ?? null, (existing as { id: number }).id],
-        );
+        await db.runAsync('UPDATE users SET display_name = ?, email = ? WHERE id = ?', [
+            displayName,
+            email ?? null,
+            (existing as { id: number }).id,
+        ]);
     } else {
-        await db.runAsync(
-            'INSERT INTO users (display_name, email) VALUES (?, ?)',
-            [displayName, email ?? null],
-        );
+        await db.runAsync('INSERT INTO users (display_name, email) VALUES (?, ?)', [
+            displayName,
+            email ?? null,
+        ]);
     }
 }

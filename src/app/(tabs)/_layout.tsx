@@ -210,11 +210,12 @@ const tab_styles = StyleSheet.create({
         }),
         // Translucent only where a real blur backs it; otherwise opaque, or feed
         // content reads straight through the bar.
-        backgroundColor: Platform.OS === 'ios'
-            ? 'transparent'
-            : ANDROID_BLUR
-              ? 'rgba(14, 14, 14, 0.45)'
-              : theme.elevated,
+        backgroundColor:
+            Platform.OS === 'ios'
+                ? 'transparent'
+                : ANDROID_BLUR
+                  ? 'rgba(14, 14, 14, 0.45)'
+                  : theme.elevated,
     },
     // Slides between tabs; same accent-tint treatment as the genre chips.
     indicator: {

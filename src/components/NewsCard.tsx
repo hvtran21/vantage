@@ -15,8 +15,18 @@ function formatDate(date: Date): string {
     }
 
     const months: string[] = [
-        'January', 'February', 'March', 'April', 'May', 'June',
-        'July', 'August', 'September', 'October', 'November', 'December',
+        'January',
+        'February',
+        'March',
+        'April',
+        'May',
+        'June',
+        'July',
+        'August',
+        'September',
+        'October',
+        'November',
+        'December',
     ];
 
     const month: string = months[date.getMonth()];
@@ -25,10 +35,14 @@ function formatDate(date: Date): string {
     function getOrdinalSuffix(day: number): string {
         if (day > 3 && day < 21) return 'th';
         switch (day % 10) {
-            case 1: return 'st';
-            case 2: return 'nd';
-            case 3: return 'rd';
-            default: return 'th';
+            case 1:
+                return 'st';
+            case 2:
+                return 'nd';
+            case 3:
+                return 'rd';
+            default:
+                return 'th';
         }
     }
 
@@ -105,7 +119,9 @@ export const NewsCard = ({
                 <View style={card_style.text_column}>
                     <View style={card_style.tag_row}>
                         <View style={[card_style.tag_pill, { backgroundColor: topicColor.bg }]}>
-                            <Text style={[card_style.tag_text, { color: topicColor.color }]}>{label}</Text>
+                            <Text style={[card_style.tag_text, { color: topicColor.color }]}>
+                                {label}
+                            </Text>
                         </View>
                         <Text style={card_style.time_text}>{time}</Text>
                     </View>

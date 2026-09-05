@@ -1,11 +1,5 @@
 import { useState, useCallback, useRef } from 'react';
-import {
-    View,
-    Text,
-    StyleSheet,
-    TouchableOpacity,
-    ScrollView,
-} from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import { SafeAreaView, SafeAreaProvider } from 'react-native-safe-area-context';
 import { useFocusEffect, router } from 'expo-router';
 import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
@@ -89,42 +83,50 @@ function GenrePreferences() {
                     </Animated.View>
                 )}
             </View>
-            <Text style={styles.section_hint}>
-                {selected.length} selected
-            </Text>
+            <Text style={styles.section_hint}>{selected.length} selected</Text>
             <View style={styles.chip_container}>
-                {!loaded ? null : genreOptions.map((genre, index) => {
-                    const active = selected.includes(genre);
-                    const tc = topicColors[genre];
-                    return (
-                        <TouchableOpacity key={genre} onPress={() => toggle(genre)} activeOpacity={0.7}>
-                            <Animated.View
-                                entering={withMotion(scale, () =>
-                                    FadeIn.duration(scaleMs(scale, 350)).delay(scaleMs(scale, index * 40)),
-                                )}
-                                style={[
-                                    styles.chip,
-                                    active && tc && {
-                                        backgroundColor: tc.bg,
-                                        borderColor: tc.color + '40',
-                                    },
-                                ]}
-                            >
-                                <Text
-                                    style={[
-                                        styles.chip_text,
-                                        active && tc && {
-                                            color: tc.color,
-                                            fontFamily: 'WorkSans-SemiBold',
-                                        },
-                                    ]}
-                                >
-                                    {genre}
-                                </Text>
-                            </Animated.View>
-                        </TouchableOpacity>
-                    );
-                })}
+                {!loaded
+                    ? null
+                    : genreOptions.map((genre, index) => {
+                          const active = selected.includes(genre);
+                          const tc = topicColors[genre];
+                          return (
+                              <TouchableOpacity
+                                  key={genre}
+                                  onPress={() => toggle(genre)}
+                                  activeOpacity={0.7}
+                              >
+                                  <Animated.View
+                                      entering={withMotion(scale, () =>
+                                          FadeIn.duration(scaleMs(scale, 350)).delay(
+                                              scaleMs(scale, index * 40),
+                                          ),
+                                      )}
+                                      style={[
+                                          styles.chip,
+                                          active &&
+                                              tc && {
+                                                  backgroundColor: tc.bg,
+                                                  borderColor: tc.color + '40',
+                                              },
+                                      ]}
+                                  >
+                                      <Text
+                                          style={[
+                                              styles.chip_text,
+                                              active &&
+                                                  tc && {
+                                                      color: tc.color,
+                                                      fontFamily: 'WorkSans-SemiBold',
+                                                  },
+                                          ]}
+                                      >
+                                          {genre}
+                                      </Text>
+                                  </Animated.View>
+                              </TouchableOpacity>
+                          );
+                      })}
             </View>
         </View>
     );
@@ -181,11 +183,18 @@ function ProfileCard({
         <View style={styles.profile_card}>
             {displayName ? (
                 <View style={styles.card_avatar_filled}>
-                    <Text style={styles.card_avatar_initial}>{displayName.charAt(0).toUpperCase()}</Text>
+                    <Text style={styles.card_avatar_initial}>
+                        {displayName.charAt(0).toUpperCase()}
+                    </Text>
                 </View>
             ) : (
                 <View style={styles.card_avatar_empty}>
-                    <FontAwesomeIcon icon={faUser} size={18} color="white" style={{ opacity: 0.15 }} />
+                    <FontAwesomeIcon
+                        icon={faUser}
+                        size={18}
+                        color="white"
+                        style={{ opacity: 0.15 }}
+                    />
                 </View>
             )}
             <View style={styles.card_info}>
@@ -229,9 +238,9 @@ function BlockedSources() {
         useCallback(() => {
             // A slow sync could otherwise land after an unblock and reinstate it.
             let cancelled = false;
-            loadRef.current(() => cancelled).catch((error) =>
-                console.warn('[profile] could not load sources:', error),
-            );
+            loadRef
+                .current(() => cancelled)
+                .catch((error) => console.warn('[profile] could not load sources:', error));
             return () => {
                 cancelled = true;
             };
@@ -337,7 +346,11 @@ export default function ProfileScreen() {
                                 onPress={handleSignOut}
                                 activeOpacity={0.7}
                             >
-                                <FontAwesomeIcon icon={faSignOutAlt} size={14} color={theme.danger} />
+                                <FontAwesomeIcon
+                                    icon={faSignOutAlt}
+                                    size={14}
+                                    color={theme.danger}
+                                />
                                 <Text style={styles.sign_out_text}>Sign out</Text>
                             </TouchableOpacity>
                         ) : (
@@ -346,8 +359,14 @@ export default function ProfileScreen() {
                                 onPress={handleSignIn}
                                 activeOpacity={0.7}
                             >
-                                <FontAwesomeIcon icon={faSignInAlt} size={14} color={theme.accent} />
-                                <Text style={[styles.sign_out_text, { color: theme.accent }]}>Sign in</Text>
+                                <FontAwesomeIcon
+                                    icon={faSignInAlt}
+                                    size={14}
+                                    color={theme.accent}
+                                />
+                                <Text style={[styles.sign_out_text, { color: theme.accent }]}>
+                                    Sign in
+                                </Text>
                             </TouchableOpacity>
                         )}
                     </View>

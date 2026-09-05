@@ -58,16 +58,28 @@ type MenuOptionProp = {
 
 const MenuOption = ({ title, selected, icon, onPress }: MenuOptionProp) => {
     return (
-        <TouchableHighlight onPress={onPress} underlayColor="rgba(255,255,255,0.04)" style={{ borderRadius: 10 }}>
+        <TouchableHighlight
+            onPress={onPress}
+            underlayColor="rgba(255,255,255,0.04)"
+            style={{ borderRadius: 10 }}
+        >
             <View style={[menu_styles.option_row, selected && menu_styles.option_selected]}>
                 <View style={menu_styles.icon_wrapper}>
                     <FontAwesomeIcon
                         icon={icon}
                         size={13}
-                        style={{ color: selected ? theme.accent : 'white', opacity: selected ? 1 : 0.45 }}
+                        style={{
+                            color: selected ? theme.accent : 'white',
+                            opacity: selected ? 1 : 0.45,
+                        }}
                     />
                 </View>
-                <Text style={[menu_styles.option_text, selected && { opacity: 1, color: theme.accent }]}>
+                <Text
+                    style={[
+                        menu_styles.option_text,
+                        selected && { opacity: 1, color: theme.accent },
+                    ]}
+                >
                     {title}
                 </Text>
             </View>
@@ -83,9 +95,24 @@ interface MenuFilterProp {
 const FilterMenu = ({ setFilter, activeFilter }: MenuFilterProp) => {
     return (
         <View style={menu_styles.menu_inner}>
-            <MenuOption title="Home" icon={faHouse} selected={activeFilter === 'Home'} onPress={() => setFilter('Home')} />
-            <MenuOption title="Recent" icon={faClock} selected={activeFilter === 'Recent'} onPress={() => setFilter('Recent')} />
-            <MenuOption title="Top" icon={faBolt} selected={activeFilter === 'Top'} onPress={() => setFilter('Top')} />
+            <MenuOption
+                title="Home"
+                icon={faHouse}
+                selected={activeFilter === 'Home'}
+                onPress={() => setFilter('Home')}
+            />
+            <MenuOption
+                title="Recent"
+                icon={faClock}
+                selected={activeFilter === 'Recent'}
+                onPress={() => setFilter('Recent')}
+            />
+            <MenuOption
+                title="Top"
+                icon={faBolt}
+                selected={activeFilter === 'Top'}
+                onPress={() => setFilter('Top')}
+            />
         </View>
     );
 };
@@ -94,7 +121,10 @@ type NetworkScope = { key: string; genre?: string; category?: string };
 
 // Cursor pagination needs a single genre or category. CSV "Home" selections
 // keep the existing first-batch-only behavior.
-const getNetworkScope = (activeFilter: string, userPreferences: string | null): NetworkScope | null => {
+const getNetworkScope = (
+    activeFilter: string,
+    userPreferences: string | null,
+): NetworkScope | null => {
     if (activeFilter === 'Top') {
         return { key: 'category:Technology', category: 'Technology' };
     }
@@ -145,15 +175,22 @@ export default function HomeFeed() {
     const [showScrollTop, setShowScrollTop] = useState(false);
     const scrollTopAnim = useRef(new Animated.Value(0)).current;
 
-    const handleScroll = useCallback((event: { nativeEvent: { contentOffset: { y: number } } }) => {
-        const y = event.nativeEvent.contentOffset.y;
-        const threshold = 1200; // ~10 cards worth of scrolling
-        const shouldShow = y > threshold;
-        if (shouldShow !== showScrollTop) {
-            setShowScrollTop(shouldShow);
-            Animated.timing(scrollTopAnim, { toValue: shouldShow ? 1 : 0, duration: 200, useNativeDriver: true }).start();
-        }
-    }, [showScrollTop, scrollTopAnim]);
+    const handleScroll = useCallback(
+        (event: { nativeEvent: { contentOffset: { y: number } } }) => {
+            const y = event.nativeEvent.contentOffset.y;
+            const threshold = 1200; // ~10 cards worth of scrolling
+            const shouldShow = y > threshold;
+            if (shouldShow !== showScrollTop) {
+                setShowScrollTop(shouldShow);
+                Animated.timing(scrollTopAnim, {
+                    toValue: shouldShow ? 1 : 0,
+                    duration: 200,
+                    useNativeDriver: true,
+                }).start();
+            }
+        },
+        [showScrollTop, scrollTopAnim],
+    );
 
     const scrollToTop = useCallback(() => {
         flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
@@ -177,21 +214,29 @@ export default function HomeFeed() {
 
     // Prefetches both scopes and records their nextCursor for later load-more.
     // Home and Top are independent requests, so run them concurrently.
-    const syncAndCaptureCursors = useCallback(async (userPreferences: string | null) => {
-        const token = (await getToken()) ?? undefined;
-        const [homeOutcome, topOutcome] = await Promise.all([
-            userPreferences ? syncArticles(userPreferences, undefined, undefined, token) : Promise.resolve(undefined),
-            syncArticles(undefined, 'Technology', undefined, token),
-        ]);
+    const syncAndCaptureCursors = useCallback(
+        async (userPreferences: string | null) => {
+            const token = (await getToken()) ?? undefined;
+            const [homeOutcome, topOutcome] = await Promise.all([
+                userPreferences
+                    ? syncArticles(userPreferences, undefined, undefined, token)
+                    : Promise.resolve(undefined),
+                syncArticles(undefined, 'Technology', undefined, token),
+            ]);
 
-        setNetworkCursors((prev) => {
-            const next: Record<string, string | null> = { ...prev, 'category:Technology': topOutcome?.nextCursor ?? null };
-            if (userPreferences && !userPreferences.includes(',')) {
-                next[`genre:${userPreferences}`] = homeOutcome?.nextCursor ?? null;
-            }
-            return next;
-        });
-    }, [getToken]);
+            setNetworkCursors((prev) => {
+                const next: Record<string, string | null> = {
+                    ...prev,
+                    'category:Technology': topOutcome?.nextCursor ?? null,
+                };
+                if (userPreferences && !userPreferences.includes(',')) {
+                    next[`genre:${userPreferences}`] = homeOutcome?.nextCursor ?? null;
+                }
+                return next;
+            });
+        },
+        [getToken],
+    );
 
     const onRefresh = useCallback(async () => {
         const canRefresh = await canRefreshArticles();
@@ -280,9 +325,7 @@ export default function HomeFeed() {
                     if (supported) await Linking.openURL(article.url);
                 },
                 onBlocked: (domain) => {
-                    setArticles((prev) =>
-                        prev.filter((item) => domainForArticle(item) !== domain),
-                    );
+                    setArticles((prev) => prev.filter((item) => domainForArticle(item) !== domain));
                 },
             });
         },
@@ -292,7 +335,11 @@ export default function HomeFeed() {
     const animateContent = useCallback(() => {
         Animated.parallel([
             Animated.timing(fadeAnimArticles, { toValue: 1, duration: 350, useNativeDriver: true }),
-            Animated.timing(slideAnimArticles, { toValue: 0, duration: 350, useNativeDriver: true }),
+            Animated.timing(slideAnimArticles, {
+                toValue: 0,
+                duration: 350,
+                useNativeDriver: true,
+            }),
         ]).start();
     }, [fadeAnimArticles, slideAnimArticles]);
 
@@ -304,14 +351,22 @@ export default function HomeFeed() {
     const toggleMenu = useCallback(() => {
         const opening = !visible;
         setVisible(opening);
-        Animated.timing(heightAnim, { toValue: opening ? 1 : 0, duration: 120, useNativeDriver: true }).start();
+        Animated.timing(heightAnim, {
+            toValue: opening ? 1 : 0,
+            duration: 120,
+            useNativeDriver: true,
+        }).start();
     }, [visible, heightAnim]);
 
     // Search
     const toggleSearch = useCallback(() => {
         const opening = !searchOpen;
         setSearchOpen(opening);
-        Animated.timing(searchAnim, { toValue: opening ? 1 : 0, duration: 200, useNativeDriver: false }).start(() => {
+        Animated.timing(searchAnim, {
+            toValue: opening ? 1 : 0,
+            duration: 200,
+            useNativeDriver: false,
+        }).start(() => {
             if (opening) {
                 searchInputRef.current?.focus();
             } else {
@@ -370,9 +425,9 @@ export default function HomeFeed() {
             // in case the article screen changed it while we were away.
             (async () => {
                 const db = await getDb();
-                const rows = (await db.getAllAsync(
-                    'SELECT id FROM articles WHERE saved = 1',
-                )) as { id: string }[];
+                const rows = (await db.getAllAsync('SELECT id FROM articles WHERE saved = 1')) as {
+                    id: string;
+                }[];
                 const savedIds = new Set(rows.map((row) => row.id));
                 setArticles((prev) =>
                     prev.map((item) => {
@@ -483,12 +538,22 @@ export default function HomeFeed() {
 
                                 <Animated.View
                                     pointerEvents={visible ? 'auto' : 'none'}
-                                    style={[menu_styles.dropdown, { transform: [{ scaleY: heightAnim }], opacity: heightAnim }]}
+                                    style={[
+                                        menu_styles.dropdown,
+                                        {
+                                            transform: [{ scaleY: heightAnim }],
+                                            opacity: heightAnim,
+                                        },
+                                    ]}
                                 >
                                     <FilterMenu
                                         setFilter={(f) => {
                                             setFilter(f);
-                                            Animated.timing(heightAnim, { toValue: 0, duration: 100, useNativeDriver: true }).start();
+                                            Animated.timing(heightAnim, {
+                                                toValue: 0,
+                                                duration: 100,
+                                                useNativeDriver: true,
+                                            }).start();
                                             setVisible(false);
                                         }}
                                         activeFilter={filter}
@@ -499,9 +564,19 @@ export default function HomeFeed() {
                     />
                     <HeaderRule />
 
-                    <Animated.View style={[search_styles.bar_wrapper, { height: searchBarHeight, opacity: searchAnim }]}>
+                    <Animated.View
+                        style={[
+                            search_styles.bar_wrapper,
+                            { height: searchBarHeight, opacity: searchAnim },
+                        ]}
+                    >
                         <View style={search_styles.bar}>
-                            <FontAwesomeIcon icon={faMagnifyingGlass} size={13} color="white" style={{ opacity: 0.25, marginRight: 10 }} />
+                            <FontAwesomeIcon
+                                icon={faMagnifyingGlass}
+                                size={13}
+                                color="white"
+                                style={{ opacity: 0.25, marginRight: 10 }}
+                            />
                             <TextInput
                                 ref={searchInputRef}
                                 style={search_styles.input}
@@ -516,7 +591,12 @@ export default function HomeFeed() {
                             />
                             {searchQuery.length > 0 && (
                                 <TouchableOpacity onPress={handleSearchClear} hitSlop={10}>
-                                    <FontAwesomeIcon icon={faCircleXmark} size={14} color="white" style={{ opacity: 0.25 }} />
+                                    <FontAwesomeIcon
+                                        icon={faCircleXmark}
+                                        size={14}
+                                        color="white"
+                                        style={{ opacity: 0.25 }}
+                                    />
                                 </TouchableOpacity>
                             )}
                         </View>
@@ -531,10 +611,18 @@ export default function HomeFeed() {
                     {loading && articles.length === 0 ? (
                         <View style={empty_styles.container}>
                             <ActivityIndicator size="large" color={theme.accent} />
-                            <Text style={[empty_styles.subtitle, { marginTop: 16 }]}>Loading articles...</Text>
+                            <Text style={[empty_styles.subtitle, { marginTop: 16 }]}>
+                                Loading articles...
+                            </Text>
                         </View>
                     ) : (
-                        <Animated.View style={{ opacity: fadeAnimArticles, transform: [{ translateY: slideAnimArticles }], flex: 1 }}>
+                        <Animated.View
+                            style={{
+                                opacity: fadeAnimArticles,
+                                transform: [{ translateY: slideAnimArticles }],
+                                flex: 1,
+                            }}
+                        >
                             <FlatList
                                 ref={flatListRef}
                                 showsVerticalScrollIndicator={false}
@@ -544,7 +632,11 @@ export default function HomeFeed() {
                                 scrollEventThrottle={100}
                                 contentContainerStyle={
                                     articles.length === 0
-                                        ? { flexGrow: 1, justifyContent: 'center', paddingBottom: TAB_BAR_INSET }
+                                        ? {
+                                              flexGrow: 1,
+                                              justifyContent: 'center',
+                                              paddingBottom: TAB_BAR_INSET,
+                                          }
                                         : { flexGrow: 1, paddingBottom: TAB_BAR_INSET }
                                 }
                                 bounces={true}
@@ -572,7 +664,11 @@ export default function HomeFeed() {
                                     ) : null
                                 }
                                 refreshControl={
-                                    <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.accent} />
+                                    <RefreshControl
+                                        refreshing={refreshing}
+                                        onRefresh={onRefresh}
+                                        tintColor={theme.accent}
+                                    />
                                 }
                             />
                         </Animated.View>
@@ -580,13 +676,19 @@ export default function HomeFeed() {
 
                     <Animated.View
                         pointerEvents={showScrollTop ? 'auto' : 'none'}
-                        style={[fab_styles.container, { opacity: scrollTopAnim, transform: [{ scale: scrollTopAnim }] }]}
+                        style={[
+                            fab_styles.container,
+                            { opacity: scrollTopAnim, transform: [{ scale: scrollTopAnim }] },
+                        ]}
                     >
-                        <TouchableOpacity onPress={scrollToTop} activeOpacity={0.8} style={fab_styles.button}>
+                        <TouchableOpacity
+                            onPress={scrollToTop}
+                            activeOpacity={0.8}
+                            style={fab_styles.button}
+                        >
                             <FontAwesomeIcon icon={faArrowUp} size={16} color="white" />
                         </TouchableOpacity>
                     </Animated.View>
-
                 </View>
             </SafeAreaView>
         </SafeAreaProvider>

@@ -58,7 +58,12 @@ export default function SavedScreen() {
             style={styles.empty_container}
         >
             <View style={styles.empty_icon_circle}>
-                <FontAwesomeIcon icon={faBookmark} size={28} color="white" style={{ opacity: 0.12 }} />
+                <FontAwesomeIcon
+                    icon={faBookmark}
+                    size={28}
+                    color="white"
+                    style={{ opacity: 0.12 }}
+                />
             </View>
             <Text style={styles.empty_title}>Nothing saved yet</Text>
             <Text style={styles.empty_subtitle}>
@@ -88,7 +93,11 @@ export default function SavedScreen() {
                     data={savedArticles}
                     contentContainerStyle={
                         savedArticles.length === 0
-                            ? { flexGrow: 1, justifyContent: 'center', paddingBottom: TAB_BAR_INSET }
+                            ? {
+                                  flexGrow: 1,
+                                  justifyContent: 'center',
+                                  paddingBottom: TAB_BAR_INSET,
+                              }
                             : { flexGrow: 1, paddingBottom: TAB_BAR_INSET }
                     }
                     ListEmptyComponent={<EmptyState />}
@@ -105,7 +114,6 @@ export default function SavedScreen() {
                     )}
                     keyExtractor={(item) => item.id}
                 />
-
             </SafeAreaView>
         </SafeAreaProvider>
     );

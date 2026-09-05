@@ -2,18 +2,20 @@ import Article from '@/lib/constants';
 import { getDb } from '@/lib/database';
 
 export function stripHtml(text: string): string {
-    return text
-        .replace(/<[^>]*>/g, '')
-        .replace(/&amp;/g, '&')
-        .replace(/&lt;/g, '<')
-        .replace(/&gt;/g, '>')
-        .replace(/&quot;/g, '"')
-        .replace(/&#39;/g, "'")
-        .replace(/&nbsp;/g, ' ')
-        // NewsAPI appends a literal '… [+28934 chars]' to truncated content.
-        .replace(/\s*\[\+[\d,]+\s*chars\]\s*$/i, '')
-        .replace(/\s{2,}/g, ' ')
-        .trim();
+    return (
+        text
+            .replace(/<[^>]*>/g, '')
+            .replace(/&amp;/g, '&')
+            .replace(/&lt;/g, '<')
+            .replace(/&gt;/g, '>')
+            .replace(/&quot;/g, '"')
+            .replace(/&#39;/g, "'")
+            .replace(/&nbsp;/g, ' ')
+            // NewsAPI appends a literal '… [+28934 chars]' to truncated content.
+            .replace(/\s*\[\+[\d,]+\s*chars\]\s*$/i, '')
+            .replace(/\s{2,}/g, ' ')
+            .trim()
+    );
 }
 
 type MetadataRow = {
@@ -35,7 +37,9 @@ export async function deleteArticlesByAge(days?: number): Promise<number> {
                 $date: cutoffDate,
             },
         );
-        console.log(`[cleanup] Removed ${result.changes} article(s) older than ${retentionDays} days`);
+        console.log(
+            `[cleanup] Removed ${result.changes} article(s) older than ${retentionDays} days`,
+        );
         return result.changes;
     } catch (error) {
         console.error('[cleanup] Error removing old articles:', error);

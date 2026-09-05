@@ -76,7 +76,9 @@ export default function WelcomePage() {
                     >
                         <Text style={welcomeStyles.wordmark}>VANTAGE</Text>
                         <Text style={welcomeStyles.main_title}>Stay{'\n'}updated.</Text>
-                        <Text style={welcomeStyles.subtitle_italic}>Just the headlines that matter.</Text>
+                        <Text style={welcomeStyles.subtitle_italic}>
+                            Just the headlines that matter.
+                        </Text>
                     </Animated.View>
 
                     <Animated.View
@@ -111,19 +113,21 @@ export default function WelcomePage() {
                                         )}
                                         style={[
                                             welcomeStyles.chip,
-                                            isSelected && tc && {
-                                                backgroundColor: tc.bg,
-                                                borderColor: tc.color + '40',
-                                            },
+                                            isSelected &&
+                                                tc && {
+                                                    backgroundColor: tc.bg,
+                                                    borderColor: tc.color + '40',
+                                                },
                                         ]}
                                     >
                                         <Text
                                             style={[
                                                 welcomeStyles.chip_text,
-                                                isSelected && tc && {
-                                                    color: tc.color,
-                                                    fontFamily: 'WorkSans-SemiBold',
-                                                },
+                                                isSelected &&
+                                                    tc && {
+                                                        color: tc.color,
+                                                        fontFamily: 'WorkSans-SemiBold',
+                                                    },
                                             ]}
                                         >
                                             {item}
@@ -169,11 +173,7 @@ export default function WelcomePage() {
                             style={welcomeStyles.submit_gradient}
                         >
                             <Text style={welcomeStyles.submit_text}>Get started</Text>
-                            <FontAwesomeIcon
-                                icon={faArrowRight}
-                                size={16}
-                                color="white"
-                            />
+                            <FontAwesomeIcon icon={faArrowRight} size={16} color="white" />
                         </LinearGradient>
                     </TouchableOpacity>
 
