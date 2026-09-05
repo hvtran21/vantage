@@ -1,0 +1,165 @@
+import { getDb } from '@/lib/database';
+import { BASE_URL } from '@/lib/services';
+import { principalHeaders } from '@/lib/principal';
+
+export interface BlockedSource {
+    source_domain: string;
+    created_at: string;
+    synced: number;
+}
+
+/** Domains to exclude from feed queries. */
+export async function getBlockedDomains(): Promise<string[]> {
+    const db = await getDb();
+    const rows = await db.getAllAsync<{ source_domain: string }>(
+        'SELECT source_domain FROM blocked_sources',
+    );
+    return rows.map((row) => row.source_domain);
+}
+
+export async function listBlocked(): Promise<BlockedSource[]> {
+    const db = await getDb();
+    return db.getAllAsync<BlockedSource>(
+        'SELECT source_domain, created_at, synced FROM blocked_sources ORDER BY created_at DESC',
+    );
+}
+
+/**
+ * Blocks locally first, then tells the server.
+ *
+ * Local-first because the feed should update the instant someone taps, and
+ * because blocking has to work offline and while signed out. The synced flag is
+ * what lets an unsynced row get pushed later.
+ */
+export async function blockSource(domain: string, token?: string | null): Promise<void> {
+    const db = await getDb();
+
+    await db.runAsync(
+        `INSERT INTO blocked_sources (source_domain, synced) VALUES (?, 0)
+         ON CONFLICT(source_domain) DO NOTHING`,
+        [domain],
+    );
+
+    // Drop what's already cached from this publisher so the feed reflects the
+    // block now rather than whenever the cache next rotates. Saved articles stay:
+    // blocking a publisher shouldn't delete something deliberately kept.
+    await db.runAsync('DELETE FROM articles WHERE source_domain = ? AND saved = 0', [domain]);
+
+    await pushBlock(domain, token);
+}
+
+export async function unblockSource(domain: string, token?: string | null): Promise<void> {
+    const db = await getDb();
+    await db.runAsync('DELETE FROM blocked_sources WHERE source_domain = ?', [domain]);
+
+    try {
+        await fetch(`${BASE_URL}/api/me/blocked-sources/${encodeURIComponent(domain)}`, {
+            method: 'DELETE',
+            headers: await principalHeaders(token),
+        });
+    } catch (error) {
+        console.warn('[sources] unblock did not reach the server:', error);
+    }
+}
+
+/**
+ * Reports a publisher. Requires a signed-in token -- the server refuses
+ * anonymous reports, so there is no point queueing one.
+ */
+export async function reportSource(
+    domain: string,
+    token: string,
+    articleId?: string,
+    reason?: 'misleading' | 'spam' | 'offensive' | 'other',
+): Promise<boolean> {
+    // Reporting implies not wanting to see it, and the server blocks it too.
+    await blockSource(domain, token);
+
+    try {
+        const response = await fetch(`${BASE_URL}/api/me/reports`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+            body: JSON.stringify({ domain, articleId, reason }),
+        });
+        return response.ok;
+    } catch (error) {
+        console.warn('[sources] report failed:', error);
+        return false;
+    }
+}
+
+async function pushBlock(domain: string, token?: string | null): Promise<boolean> {
+    try {
+        const response = await fetch(`${BASE_URL}/api/me/blocked-sources`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...(await principalHeaders(token)) },
+            body: JSON.stringify({ domain }),
+        });
+        if (!response.ok) return false;
+
+        const db = await getDb();
+        await db.runAsync('UPDATE blocked_sources SET synced = 1 WHERE source_domain = ?', [domain]);
+        return true;
+    } catch (error) {
+        // Offline, or the API is down. The row stays unsynced and syncBlocked
+        // pushes it next time.
+        console.warn('[sources] block did not reach the server:', error);
+        return false;
+    }
+}
+
+/**
+ * Reconciles the local blocklist with the server's as a union.
+ *
+ * Union rather than server-wins: a blocklist quietly losing entries is the bad
+ * failure mode, and anything blocked while offline hasn't reached the server yet.
+ */
+export async function syncBlockedSources(token?: string | null): Promise<void> {
+    const db = await getDb();
+
+    try {
+        const pending = await db.getAllAsync<{ source_domain: string }>(
+            'SELECT source_domain FROM blocked_sources WHERE synced = 0',
+        );
+        for (const row of pending) {
+            await pushBlock(row.source_domain, token);
+        }
+
+        const response = await fetch(`${BASE_URL}/api/me/blocked-sources`, {
+            headers: await principalHeaders(token),
+        });
+        if (!response.ok) return;
+
+        const { sources } = (await response.json()) as {
+            sources: { source_domain: string; created_at: string }[];
+        };
+
+        for (const source of sources) {
+            await db.runAsync(
+                `INSERT INTO blocked_sources (source_domain, created_at, synced) VALUES (?, ?, 1)
+                 ON CONFLICT(source_domain) DO UPDATE SET synced = 1`,
+                [source.source_domain, source.created_at],
+            );
+            await db.runAsync('DELETE FROM articles WHERE source_domain = ? AND saved = 0', [
+                source.source_domain,
+            ]);
+        }
+    } catch (error) {
+        console.warn('[sources] sync failed:', error);
+    }
+}
+
+/** Domains this account has reported, for badging the manage-sources list. */
+export async function listReportedDomains(token: string): Promise<string[]> {
+    try {
+        const response = await fetch(`${BASE_URL}/api/me/reports`, {
+            headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!response.ok) return [];
+        const { reports } = (await response.json()) as { reports: { source_domain: string }[] };
+        return reports.map((report) => report.source_domain);
+    } catch (error) {
+        console.warn('[sources] could not load reports:', error);
+        return [];
+    }
+}

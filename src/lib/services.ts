@@ -2,8 +2,15 @@ import Article from '@/lib/constants';
 import { getDb } from '@/lib/database';
 import { updateArticleQueryTime } from '@/lib/utilities';
 import { principalHeaders } from '@/lib/principal';
+import { extractDomain } from '@/lib/domain';
 
 export const BASE_URL = process.env.EXPO_PUBLIC_BASE_URL || 'http://localhost:8081';
+
+// Blocked publishers are excluded in the query rather than filtered afterwards,
+// so a LIMIT still returns a full page. A plain NOT IN would drop rows with a
+// null source_domain -- those predate the column and should stay visible.
+const NOT_BLOCKED =
+    '(source_domain IS NULL OR source_domain NOT IN (SELECT source_domain FROM blocked_sources))';
 
 export async function syncArticles(genre?: string, category?: string, cursor?: string, token?: string) {
     try {
@@ -55,7 +62,7 @@ export default async function getArticles(
         const results = await Promise.all(
             genreList.map(async (genre) => {
                 return await db.getAllAsync(
-                    'SELECT * FROM articles WHERE genre = ? LIMIT ? OFFSET ?',
+                    `SELECT * FROM articles WHERE genre = ? AND ${NOT_BLOCKED} LIMIT ? OFFSET ?`,
                     [genre, limit, offset],
                 );
             }),
@@ -65,7 +72,7 @@ export default async function getArticles(
         }
     } else if (category !== undefined && genres === undefined) {
         const results = await db.getAllAsync(
-            'SELECT * FROM articles WHERE category = ? LIMIT ? OFFSET ?',
+            `SELECT * FROM articles WHERE category = ? AND ${NOT_BLOCKED} LIMIT ? OFFSET ?`,
             [category, limit, offset],
         );
         if (results) {
@@ -83,7 +90,7 @@ export async function getSavedArticles(): Promise<Article[]> {
 export async function getAllArticles(limit: number = 100, offset: number = 0): Promise<Article[]> {
     const db = await getDb();
     const results = await db.getAllAsync(
-        'SELECT * FROM articles ORDER BY published_at DESC LIMIT ? OFFSET ?',
+        `SELECT * FROM articles WHERE ${NOT_BLOCKED} ORDER BY published_at DESC LIMIT ? OFFSET ?`,
         [limit, offset],
     );
     return (results as Article[]) ?? [];
@@ -93,7 +100,9 @@ export async function searchArticles(query: string): Promise<Article[]> {
     const db = await getDb();
     const searchTerm = `%${query}%`;
     const results = await db.getAllAsync(
-        'SELECT * FROM articles WHERE title LIKE ? OR description LIKE ? LIMIT 50',
+        // The OR needs its own parentheses, or the block filter would only apply
+        // to the description half.
+        `SELECT * FROM articles WHERE (title LIKE ? OR description LIKE ?) AND ${NOT_BLOCKED} LIMIT 50`,
         [searchTerm, searchTerm],
     );
     return (results as Article[]) ?? [];
@@ -140,7 +149,7 @@ export async function fetchAndCacheArticles(
 
         const db = await getDb();
         const statement = await db.prepareAsync(
-            'INSERT OR IGNORE INTO articles(id, genre, category, source, author, title, description, url, url_to_image, published_at, content, saved) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            'INSERT OR IGNORE INTO articles(id, genre, category, source, author, title, description, url, url_to_image, published_at, content, saved, source_domain) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
         );
 
         let insertedCount = 0;
@@ -159,6 +168,8 @@ export async function fetchAndCacheArticles(
                     article.published_at ?? null,
                     article.content ?? null,
                     0,
+                    // The API sends this; fall back for anything older.
+                    article.source_domain ?? extractDomain(article.url) ?? null,
                 ]);
                 if (result.changes > 0) insertedCount++;
             }

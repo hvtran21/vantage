@@ -38,6 +38,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import Article from '@/lib/constants';
 import getArticles, { syncArticles, getAllArticles, searchArticles } from '@/lib/services';
 import { deleteArticlesByAge, canRefreshArticles } from '@/lib/utilities';
+import { domainForArticle } from '@/lib/domain';
 import { useMotion } from '@/components/Motion';
 import { scaleMs, withMotion } from '@/lib/motion';
 import ReAnimated, { FadeIn } from 'react-native-reanimated';
@@ -259,6 +260,11 @@ export default function HomeFeed() {
                 onOpenInBrowser: async () => {
                     const supported = await Linking.canOpenURL(article.url);
                     if (supported) await Linking.openURL(article.url);
+                },
+                onBlocked: (domain) => {
+                    setArticles((prev) =>
+                        prev.filter((item) => domainForArticle(item) !== domain),
+                    );
                 },
             });
         },

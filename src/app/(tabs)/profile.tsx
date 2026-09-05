@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import {
     View,
     Text,
@@ -13,6 +13,13 @@ import { faUser, faCheck, faSignOutAlt, faSignInAlt } from '@fortawesome/free-so
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useUser, useAuth } from '@clerk/expo';
 import { TabHeader, HeaderRule, theme, topicColors } from '@/components/styles';
+import {
+    listBlocked,
+    listReportedDomains,
+    syncBlockedSources,
+    unblockSource,
+    type BlockedSource,
+} from '@/lib/sources';
 import { useMotion } from '@/components/Motion';
 import { scaleMs, withMotion, type MotionPreference } from '@/lib/motion';
 import Animated, { FadeIn } from 'react-native-reanimated';
@@ -191,6 +198,82 @@ function ProfileCard({
     );
 }
 
+// One list rather than two: reporting also blocks, so a separate reported
+// section would show the same domain twice.
+function BlockedSources() {
+    const { isSignedIn, getToken } = useAuth();
+    const [sources, setSources] = useState<BlockedSource[]>([]);
+    const [reported, setReported] = useState<string[]>([]);
+
+    const load = useCallback(async () => {
+        const token = isSignedIn ? await getToken() : null;
+        await syncBlockedSources(token);
+        setSources(await listBlocked());
+        setReported(token ? await listReportedDomains(token) : []);
+    }, [isSignedIn, getToken]);
+
+    // Held in a ref so the focus effect has no dependencies. Clerk's getToken
+    // is not referentially stable, so depending on `load` directly re-fired this
+    // on every render -- and because load() sets state, that was an unbounded
+    // request loop against the API.
+    const loadRef = useRef(load);
+    loadRef.current = load;
+
+    useFocusEffect(
+        useCallback(() => {
+            loadRef.current();
+        }, []),
+    );
+
+    const handleUnblock = useCallback(
+        async (domain: string) => {
+            // Drop it from the list first; the request is best-effort and the
+            // next sync reconciles either way.
+            setSources((prev) => prev.filter((item) => item.source_domain !== domain));
+            const token = isSignedIn ? await getToken() : null;
+            await unblockSource(domain, token);
+        },
+        [isSignedIn, getToken],
+    );
+
+    return (
+        <View style={styles.section}>
+            <Text style={styles.section_label}>SOURCES</Text>
+            <Text style={styles.section_hint}>
+                Publishers you have blocked. Their articles stay out of your feed.
+            </Text>
+
+            {sources.length === 0 ? (
+                <Text style={styles.sources_empty}>
+                    Nothing blocked yet. Use the menu on any article to block its publisher.
+                </Text>
+            ) : (
+                sources.map((source) => (
+                    <View key={source.source_domain} style={styles.source_row}>
+                        <View style={styles.source_info}>
+                            <Text style={styles.source_domain} numberOfLines={1}>
+                                {source.source_domain}
+                            </Text>
+                            {reported.includes(source.source_domain) && (
+                                <View style={styles.reported_badge}>
+                                    <Text style={styles.reported_text}>REPORTED</Text>
+                                </View>
+                            )}
+                        </View>
+                        <TouchableOpacity
+                            onPress={() => handleUnblock(source.source_domain)}
+                            hitSlop={10}
+                            activeOpacity={0.7}
+                        >
+                            <Text style={styles.unblock_text}>Unblock</Text>
+                        </TouchableOpacity>
+                    </View>
+                ))
+            )}
+        </View>
+    );
+}
+
 export default function ProfileScreen() {
     const { user } = useUser();
     const { signOut } = useAuth();
@@ -247,6 +330,8 @@ export default function ProfileScreen() {
 
                     <MotionPreferences />
 
+                    <BlockedSources />
+
                     <GenrePreferences />
                 </ScrollView>
             </SafeAreaView>
@@ -298,6 +383,51 @@ const styles = StyleSheet.create({
         fontFamily: 'WorkSans-Regular',
         fontSize: 12,
         color: '#4ade80',
+    },
+    sources_empty: {
+        fontFamily: 'WorkSans-Light',
+        fontSize: 13,
+        lineHeight: 19,
+        color: theme.text_tertiary,
+        marginTop: 4,
+    },
+    source_row: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: 12,
+        paddingVertical: 12,
+        borderBottomWidth: StyleSheet.hairlineWidth,
+        borderBottomColor: theme.border,
+    },
+    source_info: {
+        flex: 1,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+    },
+    source_domain: {
+        flexShrink: 1,
+        fontFamily: 'WorkSans-Regular',
+        fontSize: 15,
+        color: theme.text,
+    },
+    reported_badge: {
+        backgroundColor: 'rgba(239, 68, 68, 0.10)',
+        borderRadius: 4,
+        paddingHorizontal: 6,
+        paddingVertical: 2,
+    },
+    reported_text: {
+        fontFamily: 'WorkSans-SemiBold',
+        fontSize: 9,
+        letterSpacing: 0.8,
+        color: theme.danger,
+    },
+    unblock_text: {
+        fontFamily: 'WorkSans-SemiBold',
+        fontSize: 13,
+        color: theme.accent,
     },
     chip_container: {
         flexWrap: 'wrap',

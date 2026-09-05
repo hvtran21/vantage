@@ -1,4 +1,5 @@
 import { openDatabaseAsync, type SQLiteDatabase } from 'expo-sqlite';
+import { extractDomain } from '@/lib/domain';
 
 const DB_NAME = 'newsapp';
 
@@ -17,7 +18,13 @@ export function getDb(): Promise<SQLiteDatabase> {
 
 // Versioned migrations, applied via PRAGMA user_version. v1 doesn't try to
 // patch old drifted schemas (e.g. missing `category`); wipe the cache instead.
-const MIGRATIONS: { version: number; up: string }[] = [
+// `after` exists because SQLite has no regexp, so the v2 backfill can't be
+// expressed in the SQL the way the server's migration could.
+const MIGRATIONS: {
+    version: number;
+    up: string;
+    after?: (db: SQLiteDatabase) => Promise<void>;
+}[] = [
     {
         version: 1,
         up: `
@@ -47,6 +54,36 @@ const MIGRATIONS: { version: number; up: string }[] = [
             );
         `,
     },
+    {
+        version: 2,
+        up: `
+            ALTER TABLE articles ADD COLUMN source_domain TEXT;
+            CREATE INDEX IF NOT EXISTS idx_articles_source_domain
+                ON articles(source_domain);
+            CREATE TABLE IF NOT EXISTS blocked_sources (
+                source_domain TEXT PRIMARY KEY,
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                synced INTEGER NOT NULL DEFAULT 0 CHECK (synced IN (0, 1))
+            );
+        `,
+        // Rows cached before this column existed would otherwise be unblockable
+        // until they rotated out.
+        after: async (db) => {
+            const rows = await db.getAllAsync<{ id: string; url: string | null }>(
+                'SELECT id, url FROM articles WHERE source_domain IS NULL',
+            );
+            for (const row of rows) {
+                const domain = extractDomain(row.url);
+                if (domain) {
+                    await db.runAsync('UPDATE articles SET source_domain = ? WHERE id = ?', [
+                        domain,
+                        row.id,
+                    ]);
+                }
+            }
+            console.log(`[db] backfilled source_domain for ${rows.length} article(s)`);
+        },
+    },
 ];
 
 async function getUserVersion(db: SQLiteDatabase): Promise<number> {
@@ -69,6 +106,9 @@ export async function initializeDatabase() {
         await db.withTransactionAsync(async () => {
             await db.execAsync(migration.up);
         });
+        // Runs outside the transaction above: a long row-by-row backfill holding
+        // a write lock would collide with the feed's own reads on startup.
+        await migration.after?.(db);
         // PRAGMA doesn't support bound params; version is from our own static array, not user input.
         await db.execAsync(`PRAGMA user_version = ${migration.version}`);
         console.log(`[db] applied migration ${migration.version}`);

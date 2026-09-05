@@ -38,7 +38,10 @@ import {
     faBookmark as faBookmarkSolid,
 } from '@fortawesome/free-solid-svg-icons';
 import { faBookmark as faBookmarkOutline } from '@fortawesome/free-regular-svg-icons';
+import { useAuth } from '@clerk/expo';
 import Article from '@/lib/constants';
+import { domainForArticle } from '@/lib/domain';
+import { blockSource, reportSource } from '@/lib/sources';
 import { theme, getTopicColor } from '@/components/styles';
 import { useMotion } from '@/components/Motion';
 import { scaleMs, scaleSpring } from '@/lib/motion';
@@ -53,6 +56,8 @@ export type ActionSheetRequest = {
     saved: boolean;
     onToggleSave: (next: boolean) => void;
     onOpenInBrowser: () => void;
+    /** Lets the calling list drop the publisher's rows without a reload. */
+    onBlocked?: (domain: string) => void;
 };
 
 type ActionSheetApi = {
@@ -101,6 +106,7 @@ export function ActionSheetProvider({ children }: { children: ReactNode }) {
     const [saved, setSaved] = useState(false);
     const insets = useSafeAreaInsets();
     const { scale } = useMotion();
+    const { isSignedIn, getToken } = useAuth();
 
     const translateY = useSharedValue(SCREEN_HEIGHT);
     const sheetHeight = useSharedValue(SCREEN_HEIGHT);
@@ -191,6 +197,36 @@ export function ActionSheetProvider({ children }: { children: ReactNode }) {
     const article = request?.article;
     const label = article?.genre || article?.category || 'Top';
     const topicColor = getTopicColor(label);
+    // Naming the publisher makes it obvious the action is about the source, not
+    // this one article.
+    const domain = article ? domainForArticle(article) : null;
+
+    const handleBlock = useCallback(
+        (target: string) => {
+            const notify = request?.onBlocked;
+            (async () => {
+                // Signed in, the block belongs to the account, so it has to carry
+                // the token rather than falling back to the device id.
+                const token = isSignedIn ? await getToken() : null;
+                await blockSource(target, token);
+                notify?.(target);
+            })().catch((error) => console.warn('[sheet] block failed:', error));
+        },
+        [request, isSignedIn, getToken],
+    );
+
+    const handleReport = useCallback(
+        (target: string) => {
+            const notify = request?.onBlocked;
+            (async () => {
+                const token = await getToken();
+                if (!token) return;
+                await reportSource(target, token, article?.id);
+                notify?.(target);
+            })().catch((error) => console.warn('[sheet] report failed:', error));
+        },
+        [request, getToken, article],
+    );
 
     return (
         <ActionSheetContext.Provider value={api}>
@@ -264,19 +300,34 @@ export function ActionSheetProvider({ children }: { children: ReactNode }) {
                                             close();
                                         }}
                                     />
-                                    <ActionRow icon={faBan} label="Not interested" onPress={close} />
+                                    {domain && (
+                                        <ActionRow
+                                            icon={faBan}
+                                            label={`Block ${domain}`}
+                                            onPress={() => {
+                                                handleBlock(domain);
+                                                close();
+                                            }}
+                                        />
+                                    )}
                                 </View>
 
-                                <View style={styles.divider} />
-
-                                <View style={styles.group}>
-                                    <ActionRow
-                                        icon={faFlag}
-                                        label="Report"
-                                        tone="danger"
-                                        onPress={close}
-                                    />
-                                </View>
+                                {domain && isSignedIn && (
+                                    <>
+                                        <View style={styles.divider} />
+                                        <View style={styles.group}>
+                                            <ActionRow
+                                                icon={faFlag}
+                                                label={`Report ${domain}`}
+                                                tone="danger"
+                                                onPress={() => {
+                                                    handleReport(domain);
+                                                    close();
+                                                }}
+                                            />
+                                        </View>
+                                    </>
+                                )}
                             </Animated.View>
                         </GestureDetector>
                     </View>
