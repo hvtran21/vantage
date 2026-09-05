@@ -6,11 +6,15 @@ import { extractDomain } from '@/lib/domain';
 
 export const BASE_URL = process.env.EXPO_PUBLIC_BASE_URL || 'http://localhost:8081';
 
-// Blocked publishers are excluded in the query rather than filtered afterwards,
-// so a LIMIT still returns a full page. A plain NOT IN would drop rows with a
-// null source_domain -- those predate the column and should stay visible.
+// Excluded in the query rather than filtered afterwards, so a LIMIT still
+// returns a full page.
+//
+// NOT EXISTS rather than NOT IN: a single NULL inside a NOT IN subquery makes
+// the whole predicate NULL for every row, which would silently empty the feed.
+// This form also keeps articles whose own source_domain is null -- they predate
+// the column -- because the inner comparison simply never matches.
 const NOT_BLOCKED =
-    '(source_domain IS NULL OR source_domain NOT IN (SELECT source_domain FROM blocked_sources))';
+    'NOT EXISTS (SELECT 1 FROM blocked_sources b WHERE b.source_domain = articles.source_domain)';
 
 export async function syncArticles(genre?: string, category?: string, cursor?: string, token?: string) {
     try {

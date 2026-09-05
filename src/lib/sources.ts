@@ -8,15 +8,6 @@ export interface BlockedSource {
     synced: number;
 }
 
-/** Domains to exclude from feed queries. */
-export async function getBlockedDomains(): Promise<string[]> {
-    const db = await getDb();
-    const rows = await db.getAllAsync<{ source_domain: string }>(
-        'SELECT source_domain FROM blocked_sources',
-    );
-    return rows.map((row) => row.source_domain);
-}
-
 export async function listBlocked(): Promise<BlockedSource[]> {
     const db = await getDb();
     return db.getAllAsync<BlockedSource>(
@@ -48,17 +39,40 @@ export async function blockSource(domain: string, token?: string | null): Promis
     await pushBlock(domain, token);
 }
 
-export async function unblockSource(domain: string, token?: string | null): Promise<void> {
+/**
+ * Removes a block, reporting whether it stuck.
+ *
+ * There is no tombstone for unblocks, and syncBlockedSources unions the server's
+ * list back in -- so a delete that never reached the server would silently
+ * reappear on the next focus. Rather than pretend, the local row is restored and
+ * the caller is told it failed.
+ */
+export async function unblockSource(domain: string, token?: string | null): Promise<boolean> {
     const db = await getDb();
+    const previous = await db.getFirstAsync<BlockedSource>(
+        'SELECT source_domain, created_at, synced FROM blocked_sources WHERE source_domain = ?',
+        [domain],
+    );
+
     await db.runAsync('DELETE FROM blocked_sources WHERE source_domain = ?', [domain]);
 
     try {
-        await fetch(`${BASE_URL}/api/me/blocked-sources/${encodeURIComponent(domain)}`, {
-            method: 'DELETE',
-            headers: await principalHeaders(token),
-        });
+        const response = await fetch(
+            `${BASE_URL}/api/me/blocked-sources/${encodeURIComponent(domain)}`,
+            { method: 'DELETE', headers: await principalHeaders(token) },
+        );
+        // 404 means the server never had it, which is the state we wanted.
+        if (response.ok || response.status === 404) return true;
+        throw new Error(`server returned ${response.status}`);
     } catch (error) {
         console.warn('[sources] unblock did not reach the server:', error);
+        if (previous) {
+            await db.runAsync(
+                'INSERT OR REPLACE INTO blocked_sources (source_domain, created_at, synced) VALUES (?, ?, ?)',
+                [previous.source_domain, previous.created_at, previous.synced],
+            );
+        }
+        return false;
     }
 }
 
@@ -98,7 +112,9 @@ async function pushBlock(domain: string, token?: string | null): Promise<boolean
         if (!response.ok) return false;
 
         const db = await getDb();
-        await db.runAsync('UPDATE blocked_sources SET synced = 1 WHERE source_domain = ?', [domain]);
+        await db.runAsync('UPDATE blocked_sources SET synced = 1 WHERE source_domain = ?', [
+            domain,
+        ]);
         return true;
     } catch (error) {
         // Offline, or the API is down. The row stays unsynced and syncBlocked
@@ -135,6 +151,7 @@ export async function syncBlockedSources(token?: string | null): Promise<void> {
         };
 
         for (const source of sources) {
+            if (!source.source_domain) continue;
             await db.runAsync(
                 `INSERT INTO blocked_sources (source_domain, created_at, synced) VALUES (?, ?, 1)
                  ON CONFLICT(source_domain) DO UPDATE SET synced = 1`,
@@ -178,31 +195,43 @@ export async function listReportedDomains(token: string): Promise<string[]> {
  * narrow and the alternative -- pushing pending rows after the token they belong
  * to is already gone -- would attribute them to the wrong principal.
  */
-export async function replaceLocalBlocklist(token?: string | null): Promise<void> {
+export async function replaceLocalBlocklist(token?: string | null): Promise<boolean> {
     const db = await getDb();
 
     try {
         const response = await fetch(`${BASE_URL}/api/me/blocked-sources`, {
             headers: await principalHeaders(token),
         });
-        if (!response.ok) return;
+        if (!response.ok) return false;
 
         const { sources } = (await response.json()) as {
             sources: { source_domain: string; created_at: string }[];
         };
+        // A null domain would poison the block filter, and can't be removed from
+        // the manage screen either.
+        const usable = sources.filter((source) => Boolean(source.source_domain));
 
-        await db.runAsync('DELETE FROM blocked_sources');
-        for (const source of sources) {
-            await db.runAsync(
-                'INSERT INTO blocked_sources (source_domain, created_at, synced) VALUES (?, ?, 1)',
-                [source.source_domain, source.created_at],
-            );
+        // One transaction: two overlapping runs used to be able to interleave a
+        // DELETE with the other's INSERT and leave the list half-mirrored.
+        await db.withTransactionAsync(async () => {
+            await db.runAsync('DELETE FROM blocked_sources');
+            for (const source of usable) {
+                await db.runAsync(
+                    'INSERT OR REPLACE INTO blocked_sources (source_domain, created_at, synced) VALUES (?, ?, 1)',
+                    [source.source_domain, source.created_at],
+                );
+            }
+        });
+
+        for (const source of usable) {
             await db.runAsync('DELETE FROM articles WHERE source_domain = ? AND saved = 0', [
                 source.source_domain,
             ]);
         }
+        return true;
     } catch (error) {
         // Leave the local list alone rather than blanking it on a network blip.
         console.warn('[sources] could not mirror the blocklist:', error);
+        return false;
     }
 }

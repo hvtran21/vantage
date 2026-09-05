@@ -10,6 +10,7 @@ export function getDb(): Promise<SQLiteDatabase> {
     if (!dbPromise) {
         dbPromise = openDatabaseAsync(DB_NAME).then(async (db) => {
             await db.execAsync('PRAGMA busy_timeout = 3000;');
+            await migrate(db);
             return db;
         });
     }
@@ -18,57 +19,64 @@ export function getDb(): Promise<SQLiteDatabase> {
 
 // Versioned migrations, applied via PRAGMA user_version. v1 doesn't try to
 // patch old drifted schemas (e.g. missing `category`); wipe the cache instead.
-// `after` exists because SQLite has no regexp, so the v2 backfill can't be
-// expressed in the SQL the way the server's migration could.
-const MIGRATIONS: {
-    version: number;
-    up: string;
-    after?: (db: SQLiteDatabase) => Promise<void>;
-}[] = [
+type Migration = { version: number; run: (db: SQLiteDatabase) => Promise<void> };
+
+// SQLite has no `ADD COLUMN IF NOT EXISTS`, so this is how a migration stays
+// re-runnable after a partial apply.
+async function addColumn(db: SQLiteDatabase, table: string, column: string, type: string) {
+    const columns = await db.getAllAsync<{ name: string }>(`PRAGMA table_info(${table})`);
+    if (columns.some((c) => c.name === column)) return;
+    await db.execAsync(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`);
+}
+
+const MIGRATIONS: Migration[] = [
     {
         version: 1,
-        up: `
-            CREATE TABLE IF NOT EXISTS articles (
-                id TEXT PRIMARY KEY,
-                genre TEXT,
-                category TEXT,
-                source TEXT,
-                author TEXT,
-                title TEXT,
-                description TEXT,
-                url TEXT,
-                url_to_image TEXT,
-                published_at TEXT,
-                content TEXT,
-                saved INTEGER CHECK (saved IN (0, 1)) DEFAULT 0
-            );
-            CREATE TABLE IF NOT EXISTS metadata (
-                latest_article_query TEXT
-            );
-            CREATE TABLE IF NOT EXISTS users (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                display_name TEXT,
-                email TEXT,
-                avatar_uri TEXT,
-                created_at TEXT DEFAULT (datetime('now'))
-            );
-        `,
+        run: (db) =>
+            db.execAsync(`
+                CREATE TABLE IF NOT EXISTS articles (
+                    id TEXT PRIMARY KEY,
+                    genre TEXT,
+                    category TEXT,
+                    source TEXT,
+                    author TEXT,
+                    title TEXT,
+                    description TEXT,
+                    url TEXT,
+                    url_to_image TEXT,
+                    published_at TEXT,
+                    content TEXT,
+                    saved INTEGER CHECK (saved IN (0, 1)) DEFAULT 0
+                );
+                CREATE TABLE IF NOT EXISTS metadata (
+                    latest_article_query TEXT
+                );
+                CREATE TABLE IF NOT EXISTS users (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    display_name TEXT,
+                    email TEXT,
+                    avatar_uri TEXT,
+                    created_at TEXT DEFAULT (datetime('now'))
+                );
+            `),
     },
     {
         version: 2,
-        up: `
-            ALTER TABLE articles ADD COLUMN source_domain TEXT;
-            CREATE INDEX IF NOT EXISTS idx_articles_source_domain
-                ON articles(source_domain);
-            CREATE TABLE IF NOT EXISTS blocked_sources (
-                source_domain TEXT PRIMARY KEY,
-                created_at TEXT NOT NULL DEFAULT (datetime('now')),
-                synced INTEGER NOT NULL DEFAULT 0 CHECK (synced IN (0, 1))
-            );
-        `,
-        // Rows cached before this column existed would otherwise be unblockable
-        // until they rotated out.
-        after: async (db) => {
+        run: async (db) => {
+            await addColumn(db, 'articles', 'source_domain', 'TEXT');
+            await db.execAsync(`
+                CREATE INDEX IF NOT EXISTS idx_articles_source_domain
+                    ON articles(source_domain);
+                CREATE TABLE IF NOT EXISTS blocked_sources (
+                    source_domain TEXT PRIMARY KEY NOT NULL,
+                    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                    synced INTEGER NOT NULL DEFAULT 0 CHECK (synced IN (0, 1))
+                );
+            `);
+
+            // Rows cached before the column existed would otherwise be
+            // unblockable until they rotated out. SQLite has no regexp, so this
+            // can't be expressed in the SQL above.
             const rows = await db.getAllAsync<{ id: string; url: string | null }>(
                 'SELECT id, url FROM articles WHERE source_domain IS NULL',
             );
@@ -91,10 +99,8 @@ async function getUserVersion(db: SQLiteDatabase): Promise<number> {
     return row?.user_version ?? 0;
 }
 
-export async function initializeDatabase() {
-    const db = await getDb();
-
-    // Apparently 'PRAGMA journal_mode = WAL' can't run outside of a transaction.
+async function migrate(db: SQLiteDatabase) {
+    // journal_mode can't run inside a transaction.
     await db.execAsync('PRAGMA journal_mode = WAL;');
 
     const currentVersion = await getUserVersion(db);
@@ -103,16 +109,28 @@ export async function initializeDatabase() {
     );
 
     for (const migration of pending) {
+        // The version bump commits with the migration's own work. Bumping
+        // afterwards meant an interrupted run left the schema half-applied with
+        // the old version still recorded, and the retry then failed forever.
         await db.withTransactionAsync(async () => {
-            await db.execAsync(migration.up);
+            await migration.run(db);
+            // PRAGMA takes no bound params; the version comes from the static
+            // array above, not from user input.
+            await db.execAsync(`PRAGMA user_version = ${migration.version}`);
         });
-        // Runs outside the transaction above: a long row-by-row backfill holding
-        // a write lock would collide with the feed's own reads on startup.
-        await migration.after?.(db);
-        // PRAGMA doesn't support bound params; version is from our own static array, not user input.
-        await db.execAsync(`PRAGMA user_version = ${migration.version}`);
         console.log(`[db] applied migration ${migration.version}`);
     }
+}
+
+/**
+ * Opens the database and brings the schema up to date, exactly once.
+ *
+ * Migrations live inside this promise rather than in a separate exported step so
+ * no caller can reach a table before it exists -- the root PrincipalSync effect
+ * used to race the screen that called the old initializeDatabase().
+ */
+export function initializeDatabase(): Promise<SQLiteDatabase> {
+    return getDb();
 }
 
 export async function getUser() {

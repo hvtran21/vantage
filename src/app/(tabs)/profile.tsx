@@ -205,12 +205,18 @@ function BlockedSources() {
     const [sources, setSources] = useState<BlockedSource[]>([]);
     const [reported, setReported] = useState<string[]>([]);
 
-    const load = useCallback(async () => {
-        const token = isSignedIn ? await getToken() : null;
-        await syncBlockedSources(token);
-        setSources(await listBlocked());
-        setReported(token ? await listReportedDomains(token) : []);
-    }, [isSignedIn, getToken]);
+    const load = useCallback(
+        async (cancelled: () => boolean = () => false) => {
+            const token = isSignedIn ? await getToken() : null;
+            await syncBlockedSources(token);
+            if (cancelled()) return;
+            const blocked = await listBlocked();
+            if (cancelled()) return;
+            setSources(blocked);
+            setReported(token ? await listReportedDomains(token) : []);
+        },
+        [isSignedIn, getToken],
+    );
 
     // Held in a ref so the focus effect has no dependencies. Clerk's getToken
     // is not referentially stable, so depending on `load` directly re-fired this
@@ -221,17 +227,28 @@ function BlockedSources() {
 
     useFocusEffect(
         useCallback(() => {
-            loadRef.current();
+            // A slow sync could otherwise land after an unblock and reinstate it.
+            let cancelled = false;
+            loadRef.current(() => cancelled).catch((error) =>
+                console.warn('[profile] could not load sources:', error),
+            );
+            return () => {
+                cancelled = true;
+            };
         }, []),
     );
 
     const handleUnblock = useCallback(
-        async (domain: string) => {
-            // Drop it from the list first; the request is best-effort and the
-            // next sync reconciles either way.
+        (domain: string) => {
+            // Drop it optimistically, but put it back if the server refused --
+            // otherwise the next sync silently reinstates it with no explanation.
             setSources((prev) => prev.filter((item) => item.source_domain !== domain));
-            const token = isSignedIn ? await getToken() : null;
-            await unblockSource(domain, token);
+            (async () => {
+                const token = isSignedIn ? await getToken() : null;
+                if (!(await unblockSource(domain, token))) {
+                    setSources(await listBlocked());
+                }
+            })().catch((error) => console.warn('[profile] unblock failed:', error));
         },
         [isSignedIn, getToken],
     );
@@ -244,12 +261,19 @@ function BlockedSources() {
             </Text>
 
             {sources.length === 0 ? (
-                <Text style={styles.sources_empty}>
+                <Text style={styles.section_hint}>
                     Nothing blocked yet. Use the menu on any article to block its publisher.
                 </Text>
             ) : (
-                sources.map((source) => (
-                    <View key={source.source_domain} style={styles.source_row}>
+                sources.map((source, index) => (
+                    <View
+                        key={source.source_domain}
+                        style={[
+                            styles.source_row,
+                            index === 0 && styles.source_row_first,
+                            index === sources.length - 1 && styles.source_row_last,
+                        ]}
+                    >
                         <View style={styles.source_info}>
                             <Text style={styles.source_domain} numberOfLines={1}>
                                 {source.source_domain}
@@ -262,7 +286,7 @@ function BlockedSources() {
                         </View>
                         <TouchableOpacity
                             onPress={() => handleUnblock(source.source_domain)}
-                            hitSlop={10}
+                            style={styles.unblock_hit}
                             activeOpacity={0.7}
                         >
                             <Text style={styles.unblock_text}>Unblock</Text>
@@ -384,13 +408,6 @@ const styles = StyleSheet.create({
         fontSize: 12,
         color: '#4ade80',
     },
-    sources_empty: {
-        fontFamily: 'WorkSans-Light',
-        fontSize: 13,
-        lineHeight: 19,
-        color: theme.text_tertiary,
-        marginTop: 4,
-    },
     source_row: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -399,6 +416,16 @@ const styles = StyleSheet.create({
         paddingVertical: 12,
         borderBottomWidth: StyleSheet.hairlineWidth,
         borderBottomColor: theme.border,
+    },
+    // Without this the first domain sits 26pt below the hint, where every other
+    // section's content starts at 14.
+    source_row_first: {
+        paddingTop: 0,
+    },
+    // A rule under the last row reads as a section divider that isn't one; the
+    // feed's own list omits its separator the same way.
+    source_row_last: {
+        borderBottomWidth: 0,
     },
     source_info: {
         flex: 1,
@@ -409,7 +436,8 @@ const styles = StyleSheet.create({
     source_domain: {
         flexShrink: 1,
         fontFamily: 'WorkSans-Regular',
-        fontSize: 15,
+        // 14 matches the other list/control labels on this screen; 15 was off-scale.
+        fontSize: 14,
         color: theme.text,
     },
     reported_badge: {
@@ -420,9 +448,16 @@ const styles = StyleSheet.create({
     },
     reported_text: {
         fontFamily: 'WorkSans-SemiBold',
-        fontSize: 9,
+        fontSize: 11,
         letterSpacing: 0.8,
         color: theme.danger,
+    },
+    // Padded to a 44pt target rather than relying on hitSlop alone, which left
+    // it the smallest tappable thing on the screen.
+    unblock_hit: {
+        justifyContent: 'center',
+        minHeight: 44,
+        paddingLeft: 12,
     },
     unblock_text: {
         fontFamily: 'WorkSans-SemiBold',

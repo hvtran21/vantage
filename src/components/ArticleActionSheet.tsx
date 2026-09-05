@@ -163,7 +163,10 @@ export function ActionSheetProvider({ children }: { children: ReactNode }) {
                     translateY.value = Math.max(0, event.translationY);
                 })
                 .onEnd((event) => {
-                    if (event.translationY > DISMISS_DISTANCE || event.velocityY > DISMISS_VELOCITY) {
+                    if (
+                        event.translationY > DISMISS_DISTANCE ||
+                        event.velocityY > DISMISS_VELOCITY
+                    ) {
                         runOnJS(close)();
                     } else if (scale === 0) {
                         translateY.value = 0;
@@ -182,12 +185,7 @@ export function ActionSheetProvider({ children }: { children: ReactNode }) {
     }));
 
     const scrimStyle = useAnimatedStyle(() => ({
-        opacity: interpolate(
-            translateY.value,
-            [0, sheetHeight.value],
-            [1, 0],
-            Extrapolation.CLAMP,
-        ),
+        opacity: interpolate(translateY.value, [0, sheetHeight.value], [1, 0], Extrapolation.CLAMP),
     }));
 
     const onSheetLayout = (event: LayoutChangeEvent) => {

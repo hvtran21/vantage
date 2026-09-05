@@ -16,6 +16,10 @@ export function PrincipalSync() {
     // Tracks the identity, not just signed-in-ness, so switching accounts on one
     // device is treated as the change it is.
     const activePrincipal = useRef<string | null>(null);
+    // Clerk's getToken is not referentially stable and it refreshes on a timer,
+    // so depending on it here re-ran the whole link-and-mirror mid-flight.
+    const getTokenRef = useRef(getToken);
+    getTokenRef.current = getToken;
 
     useEffect(() => {
         const principal = isSignedIn && userId ? `clerk:${userId}` : 'anon';
@@ -24,7 +28,7 @@ export function PrincipalSync() {
         let cancelled = false;
 
         (async () => {
-            const token = isSignedIn ? await getToken() : null;
+            const token = isSignedIn ? await getTokenRef.current() : null;
             if (cancelled) return;
 
             if (token) {
@@ -36,9 +40,12 @@ export function PrincipalSync() {
 
             // Mirror whoever is acting now. Replace, not union -- see
             // replaceLocalBlocklist for why that matters on a shared device.
-            await replaceLocalBlocklist(token);
+            const mirrored = await replaceLocalBlocklist(token);
 
-            if (!cancelled) activePrincipal.current = principal;
+            // Only claim the principal once the mirror actually landed. Marking
+            // it after a swallowed failure meant the blocklist stayed stale for
+            // the rest of the session with nothing to retrigger it.
+            if (!cancelled && mirrored) activePrincipal.current = principal;
         })().catch((error) => {
             // Non-fatal: the app works, it just hasn't reconciled preferences.
             // activePrincipal stays unset so the next change retries.
@@ -48,7 +55,7 @@ export function PrincipalSync() {
         return () => {
             cancelled = true;
         };
-    }, [isSignedIn, userId, getToken]);
+    }, [isSignedIn, userId]);
 
     return null;
 }
