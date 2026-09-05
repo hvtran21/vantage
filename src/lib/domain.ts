@@ -1,9 +1,7 @@
 /**
- * The publisher a URL belongs to, e.g. "thenextweb.com".
- *
- * Mirrors src/lib/domain.ts in vantage-api. The API sends source_domain on every
- * article, so this is only needed for rows cached before that column existed and
- * for turning an article into something blockable.
+ * The publisher a URL belongs to, e.g. "thenextweb.com". Mirrors
+ * src/lib/domain.ts in vantage-api; only needed for rows cached before the
+ * source_domain column existed.
  */
 export function extractDomain(url: string | null | undefined): string | null {
     if (!url) return null;

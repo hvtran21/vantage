@@ -21,9 +21,7 @@ import { theme } from '@/components/styles';
 const INDICATOR_INSET = 6;
 const SLIDE = { damping: 18, stiffness: 190, mass: 0.6 };
 
-// dimezisBlurView leans on RenderEffect and is only dependable from API 31.
-// Below that it can silently no-op, which would leave the pill see-through --
-// so those devices get an opaque fill instead of trusting an experimental path.
+// dimezisBlurView only became dependable in API 31; below that it can no-op.
 const ANDROID_BLUR = Platform.OS === 'android' && Number(Platform.Version) >= 31;
 const BLURRED = Platform.OS === 'ios' || ANDROID_BLUR;
 
@@ -39,11 +37,8 @@ function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
 
     useEffect(() => {
         if (!itemWidth) return;
-        // flexDirection: 'row' mirrors under RTL, so the indicator has to travel
-        // the other way to stay under the tab it belongs to.
+        // flexDirection: 'row' mirrors under RTL, so the travel flips with it.
         const target = state.index * itemWidth * (I18nManager.isRTL ? -1 : 1);
-        // Jump on first measure and on any width change (rotation); only a tab
-        // change should animate.
         const resized = lastItemWidth.current !== itemWidth;
         lastItemWidth.current = itemWidth;
         indicatorX.value = resized ? target : withSpring(target, SLIDE);
@@ -69,7 +64,6 @@ function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
                     />
                 )}
 
-                {/* Top-edge highlight, so the bar reads as a lit surface. */}
                 <LinearGradient
                     colors={['rgba(255,255,255,0.08)', 'rgba(255,255,255,0.02)', 'transparent']}
                     locations={[0, 0.45, 1]}
@@ -112,12 +106,10 @@ function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
                         <Pressable
                             key={route.key}
                             onPress={onPress}
-                            // Everything marking the active tab is visual, so the
-                            // selected state has to be announced explicitly.
                             accessibilityRole="tab"
                             accessibilityState={{ selected: focused }}
                             accessibilityLabel={label}
-                            // borderless keeps the ripple clear of the pill's rounded ends.
+                            // A bounded ripple would square off the pill's rounded ends.
                             android_ripple={{
                                 color: 'rgba(255, 255, 255, 0.10)',
                                 borderless: true,
@@ -208,8 +200,7 @@ const tab_styles = StyleSheet.create({
             ios: 'rgba(255,255,255,0.14)',
             default: 'rgba(255,255,255,0.20)',
         }),
-        // Translucent only where a real blur backs it; otherwise opaque, or feed
-        // content reads straight through the bar.
+        // Translucent only where a real blur backs it.
         backgroundColor:
             Platform.OS === 'ios'
                 ? 'transparent'
@@ -217,7 +208,6 @@ const tab_styles = StyleSheet.create({
                   ? 'rgba(14, 14, 14, 0.45)'
                   : theme.elevated,
     },
-    // Slides between tabs; same accent-tint treatment as the genre chips.
     indicator: {
         position: 'absolute',
         top: 8,

@@ -15,13 +15,7 @@ export async function listBlocked(): Promise<BlockedSource[]> {
     );
 }
 
-/**
- * Blocks locally first, then tells the server.
- *
- * Local-first because the feed should update the instant someone taps, and
- * because blocking has to work offline and while signed out. The synced flag is
- * what lets an unsynced row get pushed later.
- */
+/** Local-first, so it works offline and while signed out; `synced` queues the push. */
 export async function blockSource(domain: string, token?: string | null): Promise<void> {
     const db = await getDb();
 
@@ -31,21 +25,15 @@ export async function blockSource(domain: string, token?: string | null): Promis
         [domain],
     );
 
-    // Drop what's already cached from this publisher so the feed reflects the
-    // block now rather than whenever the cache next rotates. Saved articles stay:
-    // blocking a publisher shouldn't delete something deliberately kept.
+    // Saved articles stay: blocking a publisher shouldn't delete something kept.
     await db.runAsync('DELETE FROM articles WHERE source_domain = ? AND saved = 0', [domain]);
 
     await pushBlock(domain, token);
 }
 
 /**
- * Removes a block, reporting whether it stuck.
- *
- * There is no tombstone for unblocks, and syncBlockedSources unions the server's
- * list back in -- so a delete that never reached the server would silently
- * reappear on the next focus. Rather than pretend, the local row is restored and
- * the caller is told it failed.
+ * Removes a block, reporting whether it stuck. There's no tombstone, and the
+ * union sync would silently reinstate a delete that never reached the server.
  */
 export async function unblockSource(domain: string, token?: string | null): Promise<boolean> {
     const db = await getDb();
@@ -76,17 +64,13 @@ export async function unblockSource(domain: string, token?: string | null): Prom
     }
 }
 
-/**
- * Reports a publisher. Requires a signed-in token -- the server refuses
- * anonymous reports, so there is no point queueing one.
- */
+/** Needs a token: the server refuses anonymous reports, so queueing is pointless. */
 export async function reportSource(
     domain: string,
     token: string,
     articleId?: string,
     reason?: 'misleading' | 'spam' | 'offensive' | 'other',
 ): Promise<boolean> {
-    // Reporting implies not wanting to see it, and the server blocks it too.
     await blockSource(domain, token);
 
     try {
@@ -117,19 +101,13 @@ async function pushBlock(domain: string, token?: string | null): Promise<boolean
         ]);
         return true;
     } catch (error) {
-        // Offline, or the API is down. The row stays unsynced and syncBlocked
-        // pushes it next time.
+        // Stays unsynced; syncBlockedSources pushes it next time.
         console.warn('[sources] block did not reach the server:', error);
         return false;
     }
 }
 
-/**
- * Reconciles the local blocklist with the server's as a union.
- *
- * Union rather than server-wins: a blocklist quietly losing entries is the bad
- * failure mode, and anything blocked while offline hasn't reached the server yet.
- */
+/** Union, not server-wins: a blocklist quietly losing entries is the bad failure. */
 export async function syncBlockedSources(token?: string | null): Promise<void> {
     const db = await getDb();
 

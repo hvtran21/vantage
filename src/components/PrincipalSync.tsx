@@ -5,19 +5,15 @@ import { BASE_URL } from '@/lib/services';
 import { replaceLocalBlocklist } from '@/lib/sources';
 
 /**
- * Keeps the device's preferences pointed at whoever is currently acting.
- *
- * Renders nothing. Mounted once at the root rather than per-screen, because a
- * screen that happened to be unmounted at the moment of sign-in would miss the
- * transition entirely.
+ * Points the device's preferences at whoever is currently acting. Renders
+ * nothing, and lives at the root because a screen unmounted at the moment of
+ * sign-in would miss the transition.
  */
 export function PrincipalSync() {
     const { isSignedIn, userId, getToken } = useAuth();
-    // Tracks the identity, not just signed-in-ness, so switching accounts on one
-    // device is treated as the change it is.
+    // The identity, not just signed-in-ness, so account switches count.
     const activePrincipal = useRef<string | null>(null);
-    // Clerk's getToken is not referentially stable and it refreshes on a timer,
-    // so depending on it here re-ran the whole link-and-mirror mid-flight.
+    // getToken isn't referentially stable, so depending on it re-ran this mid-flight.
     const getTokenRef = useRef(getToken);
     getTokenRef.current = getToken;
 
@@ -32,23 +28,18 @@ export function PrincipalSync() {
             if (cancelled) return;
 
             if (token) {
-                // Claims the device's anonymous principal so anything set before
-                // signing in follows the account. The server does the merge.
                 await linkAnonPrincipal(token);
             }
             if (cancelled) return;
 
-            // Mirror whoever is acting now. Replace, not union -- see
-            // replaceLocalBlocklist for why that matters on a shared device.
+            // Replace, not union -- see replaceLocalBlocklist.
             const mirrored = await replaceLocalBlocklist(token);
 
-            // Only claim the principal once the mirror actually landed. Marking
-            // it after a swallowed failure meant the blocklist stayed stale for
-            // the rest of the session with nothing to retrigger it.
+            // Only claim it once the mirror landed, or a swallowed failure would
+            // leave the blocklist stale for the session.
             if (!cancelled && mirrored) activePrincipal.current = principal;
         })().catch((error) => {
-            // Non-fatal: the app works, it just hasn't reconciled preferences.
-            // activePrincipal stays unset so the next change retries.
+            // Non-fatal; activePrincipal stays unset so the next change retries.
             console.warn('[principal] sync failed:', error);
         });
 
