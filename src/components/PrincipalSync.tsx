@@ -2,61 +2,79 @@ import { useEffect, useRef } from 'react';
 import { useAuth } from '@clerk/expo';
 import { getAnonId } from '@/lib/principal';
 import { BASE_URL } from '@/lib/services';
+import { replaceLocalBlocklist } from '@/lib/sources';
 
 /**
- * Claims this device's anonymous principal for the account as soon as someone
- * signs in, so anything they set while signed out follows them.
+ * Keeps the device's preferences pointed at whoever is currently acting.
  *
  * Renders nothing. Mounted once at the root rather than per-screen, because a
- * screen that happens to be unmounted at sign-in would miss the transition.
+ * screen that happened to be unmounted at the moment of sign-in would miss the
+ * transition entirely.
  */
 export function PrincipalSync() {
-    const { isSignedIn, getToken } = useAuth();
-    const linkedFor = useRef<string | null>(null);
+    const { isSignedIn, userId, getToken } = useAuth();
+    // Tracks the identity, not just signed-in-ness, so switching accounts on one
+    // device is treated as the change it is.
+    const activePrincipal = useRef<string | null>(null);
 
     useEffect(() => {
-        if (!isSignedIn) {
-            // Signing out means the next sign-in should link again -- it may be a
-            // different account on the same device.
-            linkedFor.current = null;
-            return;
-        }
+        const principal = isSignedIn && userId ? `clerk:${userId}` : 'anon';
+        if (activePrincipal.current === principal) return;
 
         let cancelled = false;
 
         (async () => {
-            try {
-                const token = await getToken();
-                if (!token || cancelled || linkedFor.current === token) return;
+            const token = isSignedIn ? await getToken() : null;
+            if (cancelled) return;
 
-                const anonId = await getAnonId();
-                const response = await fetch(`${BASE_URL}/api/me/link-anon`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        Authorization: `Bearer ${token}`,
-                    },
-                    body: JSON.stringify({ anonId }),
-                });
-
-                if (!response.ok) {
-                    console.warn(`[principal] link-anon failed with ${response.status}`);
-                    return;
-                }
-                if (!cancelled) linkedFor.current = token;
-            } catch (error) {
-                // Non-fatal: the account still works, it just hasn't absorbed the
-                // anonymous preferences yet. The next sign-in retries.
-                console.warn('[principal] link-anon failed:', error);
+            if (token) {
+                // Claims the device's anonymous principal so anything set before
+                // signing in follows the account. The server does the merge.
+                await linkAnonPrincipal(token);
             }
-        })();
+            if (cancelled) return;
+
+            // Mirror whoever is acting now. Replace, not union -- see
+            // replaceLocalBlocklist for why that matters on a shared device.
+            await replaceLocalBlocklist(token);
+
+            if (!cancelled) activePrincipal.current = principal;
+        })().catch((error) => {
+            // Non-fatal: the app works, it just hasn't reconciled preferences.
+            // activePrincipal stays unset so the next change retries.
+            console.warn('[principal] sync failed:', error);
+        });
 
         return () => {
             cancelled = true;
         };
-    }, [isSignedIn, getToken]);
+    }, [isSignedIn, userId, getToken]);
 
     return null;
+}
+
+async function linkAnonPrincipal(token: string): Promise<void> {
+    try {
+        const anonId = await getAnonId();
+        const response = await fetch(`${BASE_URL}/api/me/link-anon`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+            body: JSON.stringify({ anonId }),
+        });
+
+        if (!response.ok) {
+            console.warn(`[principal] link-anon failed with ${response.status}`);
+            return;
+        }
+
+        const { linked, merged } = (await response.json()) as {
+            linked: boolean;
+            merged: number;
+        };
+        console.log(`[principal] linked=${linked} merged=${merged} block(s)`);
+    } catch (error) {
+        console.warn('[principal] link-anon failed:', error);
+    }
 }
 
 export default PrincipalSync;
