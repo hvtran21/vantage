@@ -4,7 +4,7 @@ import { useFonts } from 'expo-font';
 import { router } from 'expo-router';
 import { useAuth } from '@clerk/expo';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { initializeDatabase } from './components/database';
+import { initializeDatabase } from '@/lib/database';
 
 const checkFirstLaunch = async () => {
     try {

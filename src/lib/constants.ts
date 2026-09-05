@@ -11,4 +11,6 @@ export default interface Article {
     published_at: string;
     content?: string;
     saved: number;
+    // Sent by the API; null on rows cached before the column existed.
+    source_domain?: string | null;
 }

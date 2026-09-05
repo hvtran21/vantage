@@ -1,0 +1,13 @@
+node_modules/
+.expo/
+dist/
+web-build/
+android/
+ios/
+
+# npm owns the formatting of both of these, and rewrites them on every install
+# with 2-space indent -- prettier's tabWidth of 4 would just churn against it.
+package.json
+package-lock.json
+
+assets/

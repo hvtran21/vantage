@@ -17,10 +17,10 @@ import {
 import { SafeAreaView, SafeAreaProvider } from 'react-native-safe-area-context';
 import { useFocusEffect } from 'expo-router';
 import { useAuth } from '@clerk/expo';
-import { ArticleActionSheet } from '../components/ArticleActionSheet';
-import { getDb } from '../components/database';
-import { NewsCard } from '../components/NewsCard';
-import { TabHeader, HeaderRule, HorizonalLine, theme } from '../components/styles';
+import { useActionSheet } from '@/components/ArticleActionSheet';
+import { getDb } from '@/lib/database';
+import { NewsCard } from '@/components/NewsCard';
+import { TabHeader, HeaderRule, HorizonalLine, theme, TAB_BAR_INSET } from '@/components/styles';
 import {
     faHouse,
     faAngleDown,
@@ -35,9 +35,18 @@ import {
 import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
 import { IconProp } from '@fortawesome/fontawesome-svg-core';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import Article from '../components/constants';
-import getArticles, { syncArticles, getAllArticles, searchArticles } from '../components/services';
-import { deleteArticlesByAge, canRefreshArticles } from '../components/utilities';
+import Article from '@/lib/constants';
+import getArticles, {
+    syncArticles,
+    getAllArticles,
+    searchArticles,
+    cursorAfter,
+    type LocalCursor,
+} from '@/lib/services';
+import { deleteArticlesByAge, canRefreshArticles } from '@/lib/utilities';
+import { domainForArticle } from '@/lib/domain';
+import { useMotion } from '@/components/Motion';
+import { scaleMs, withMotion } from '@/lib/motion';
 import ReAnimated, { FadeIn } from 'react-native-reanimated';
 
 type MenuOptionProp = {
@@ -49,16 +58,28 @@ type MenuOptionProp = {
 
 const MenuOption = ({ title, selected, icon, onPress }: MenuOptionProp) => {
     return (
-        <TouchableHighlight onPress={onPress} underlayColor="rgba(255,255,255,0.04)" style={{ borderRadius: 10 }}>
+        <TouchableHighlight
+            onPress={onPress}
+            underlayColor="rgba(255,255,255,0.04)"
+            style={{ borderRadius: 10 }}
+        >
             <View style={[menu_styles.option_row, selected && menu_styles.option_selected]}>
                 <View style={menu_styles.icon_wrapper}>
                     <FontAwesomeIcon
                         icon={icon}
                         size={13}
-                        style={{ color: selected ? theme.accent : 'white', opacity: selected ? 1 : 0.45 }}
+                        style={{
+                            color: selected ? theme.accent : 'white',
+                            opacity: selected ? 1 : 0.45,
+                        }}
                     />
                 </View>
-                <Text style={[menu_styles.option_text, selected && { opacity: 1, color: theme.accent }]}>
+                <Text
+                    style={[
+                        menu_styles.option_text,
+                        selected && { opacity: 1, color: theme.accent },
+                    ]}
+                >
                     {title}
                 </Text>
             </View>
@@ -74,9 +95,24 @@ interface MenuFilterProp {
 const FilterMenu = ({ setFilter, activeFilter }: MenuFilterProp) => {
     return (
         <View style={menu_styles.menu_inner}>
-            <MenuOption title="Home" icon={faHouse} selected={activeFilter === 'Home'} onPress={() => setFilter('Home')} />
-            <MenuOption title="Recent" icon={faClock} selected={activeFilter === 'Recent'} onPress={() => setFilter('Recent')} />
-            <MenuOption title="Top" icon={faBolt} selected={activeFilter === 'Top'} onPress={() => setFilter('Top')} />
+            <MenuOption
+                title="Home"
+                icon={faHouse}
+                selected={activeFilter === 'Home'}
+                onPress={() => setFilter('Home')}
+            />
+            <MenuOption
+                title="Recent"
+                icon={faClock}
+                selected={activeFilter === 'Recent'}
+                onPress={() => setFilter('Recent')}
+            />
+            <MenuOption
+                title="Top"
+                icon={faBolt}
+                selected={activeFilter === 'Top'}
+                onPress={() => setFilter('Top')}
+            />
         </View>
     );
 };
@@ -85,7 +121,10 @@ type NetworkScope = { key: string; genre?: string; category?: string };
 
 // Cursor pagination needs a single genre or category. CSV "Home" selections
 // keep the existing first-batch-only behavior.
-const getNetworkScope = (activeFilter: string, userPreferences: string | null): NetworkScope | null => {
+const getNetworkScope = (
+    activeFilter: string,
+    userPreferences: string | null,
+): NetworkScope | null => {
     if (activeFilter === 'Top') {
         return { key: 'category:Technology', category: 'Technology' };
     }
@@ -106,16 +145,17 @@ export default function HomeFeed() {
     const fadeAnimArticles = useRef(new Animated.Value(0)).current;
     const slideAnimArticles = useRef(new Animated.Value(12)).current;
 
-    const [showModal, setShowModal] = useState(false);
-    const [modalArticle, setModalArticle] = useState<Article>();
-    const [modalSaved, setModalSaved] = useState(false);
+    const actionSheet = useActionSheet();
+    const { scale } = useMotion();
 
     const [refreshing, setRefreshing] = useState(false);
     const initialLoadDone = useRef(false);
 
     // Pagination
     const PAGE_SIZE = 20;
-    const [page, setPage] = useState(0);
+    // Where the local feed left off, by value. A page index would drift the
+    // moment blocking a publisher purged its cached rows.
+    const [cursor, setCursor] = useState<LocalCursor | undefined>(undefined);
     const [loadingMore, setLoadingMore] = useState(false);
     const [hasMore, setHasMore] = useState(true);
 
@@ -135,50 +175,68 @@ export default function HomeFeed() {
     const [showScrollTop, setShowScrollTop] = useState(false);
     const scrollTopAnim = useRef(new Animated.Value(0)).current;
 
-    const handleScroll = useCallback((event: { nativeEvent: { contentOffset: { y: number } } }) => {
-        const y = event.nativeEvent.contentOffset.y;
-        const threshold = 1200; // ~10 cards worth of scrolling
-        const shouldShow = y > threshold;
-        if (shouldShow !== showScrollTop) {
-            setShowScrollTop(shouldShow);
-            Animated.timing(scrollTopAnim, { toValue: shouldShow ? 1 : 0, duration: 200, useNativeDriver: true }).start();
-        }
-    }, [showScrollTop, scrollTopAnim]);
+    const handleScroll = useCallback(
+        (event: { nativeEvent: { contentOffset: { y: number } } }) => {
+            const y = event.nativeEvent.contentOffset.y;
+            const threshold = 1200; // ~10 cards worth of scrolling
+            const shouldShow = y > threshold;
+            if (shouldShow !== showScrollTop) {
+                setShowScrollTop(shouldShow);
+                Animated.timing(scrollTopAnim, {
+                    toValue: shouldShow ? 1 : 0,
+                    duration: 200,
+                    useNativeDriver: true,
+                }).start();
+            }
+        },
+        [showScrollTop, scrollTopAnim],
+    );
 
     const scrollToTop = useCallback(() => {
         flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
     }, []);
 
-    const loadByFilter = useCallback(async (activeFilter: string, offset: number = 0): Promise<Article[]> => {
-        const userPreferences = await AsyncStorage.getItem('genreSelection');
-        if (activeFilter === 'Recent') {
-            return await getAllArticles(PAGE_SIZE, offset);
-        } else if (activeFilter === 'Top') {
-            return (await getArticles(undefined, 'Technology', PAGE_SIZE, offset)) ?? [];
-        }
-        if (userPreferences) {
-            return (await getArticles(userPreferences, undefined, PAGE_SIZE, offset)) ?? [];
-        }
-        return (await getArticles(undefined, 'Technology', PAGE_SIZE, offset)) ?? [];
-    }, []);
+    const loadByFilter = useCallback(
+        async (activeFilter: string, from?: LocalCursor): Promise<Article[]> => {
+            const userPreferences = await AsyncStorage.getItem('genreSelection');
+            if (activeFilter === 'Recent') {
+                return await getAllArticles(PAGE_SIZE, from);
+            } else if (activeFilter === 'Top') {
+                return (await getArticles(undefined, 'Technology', PAGE_SIZE, from)) ?? [];
+            }
+            if (userPreferences) {
+                return (await getArticles(userPreferences, undefined, PAGE_SIZE, from)) ?? [];
+            }
+            return (await getArticles(undefined, 'Technology', PAGE_SIZE, from)) ?? [];
+        },
+        [],
+    );
 
     // Prefetches both scopes and records their nextCursor for later load-more.
     // Home and Top are independent requests, so run them concurrently.
-    const syncAndCaptureCursors = useCallback(async (userPreferences: string | null) => {
-        const token = (await getToken()) ?? undefined;
-        const [homeOutcome, topOutcome] = await Promise.all([
-            userPreferences ? syncArticles(userPreferences, undefined, undefined, token) : Promise.resolve(undefined),
-            syncArticles(undefined, 'Technology', undefined, token),
-        ]);
+    const syncAndCaptureCursors = useCallback(
+        async (userPreferences: string | null) => {
+            const token = (await getToken()) ?? undefined;
+            const [homeOutcome, topOutcome] = await Promise.all([
+                userPreferences
+                    ? syncArticles(userPreferences, undefined, undefined, token)
+                    : Promise.resolve(undefined),
+                syncArticles(undefined, 'Technology', undefined, token),
+            ]);
 
-        setNetworkCursors((prev) => {
-            const next: Record<string, string | null> = { ...prev, 'category:Technology': topOutcome?.nextCursor ?? null };
-            if (userPreferences && !userPreferences.includes(',')) {
-                next[`genre:${userPreferences}`] = homeOutcome?.nextCursor ?? null;
-            }
-            return next;
-        });
-    }, [getToken]);
+            setNetworkCursors((prev) => {
+                const next: Record<string, string | null> = {
+                    ...prev,
+                    'category:Technology': topOutcome?.nextCursor ?? null,
+                };
+                if (userPreferences && !userPreferences.includes(',')) {
+                    next[`genre:${userPreferences}`] = homeOutcome?.nextCursor ?? null;
+                }
+                return next;
+            });
+        },
+        [getToken],
+    );
 
     const onRefresh = useCallback(async () => {
         const canRefresh = await canRefreshArticles();
@@ -190,9 +248,9 @@ export default function HomeFeed() {
         const userPreferences = await AsyncStorage.getItem('genreSelection');
         await syncAndCaptureCursors(userPreferences);
 
-        const newArticles = await loadByFilter(filter, 0);
+        const newArticles = await loadByFilter(filter);
         setArticles(newArticles);
-        setPage(0);
+        setCursor(cursorAfter(newArticles));
         setHasMore(newArticles.length >= PAGE_SIZE);
         setRefreshing(false);
     }, [filter, loadByFilter, syncAndCaptureCursors]);
@@ -201,25 +259,32 @@ export default function HomeFeed() {
         if (loadingMore || !hasMore || searchOpen) return;
 
         setLoadingMore(true);
-        const nextOffset = (page + 1) * PAGE_SIZE;
-        let nextBatch = await loadByFilter(filter, nextOffset);
+        let nextBatch = await loadByFilter(filter, cursor);
 
         // Local cache ran out, try a network top-up before giving up.
         if (nextBatch.length < PAGE_SIZE) {
             const userPreferences = await AsyncStorage.getItem('genreSelection');
             const scope = getNetworkScope(filter, userPreferences);
-            const cursor = scope ? networkCursors[scope.key] : undefined;
+            // The API's opaque cursor, distinct from the local keyset one above.
+            const networkCursor = scope ? networkCursors[scope.key] : undefined;
 
-            if (scope && cursor) {
+            if (scope && networkCursor) {
                 const token = (await getToken()) ?? undefined;
-                const outcome = await syncArticles(scope.genre, scope.category, cursor, token);
+                const outcome = await syncArticles(
+                    scope.genre,
+                    scope.category,
+                    networkCursor,
+                    token,
+                );
                 setNetworkCursors((prev) => ({
                     ...prev,
                     // Keep the prior cursor on failure so the next scroll retries.
                     [scope.key]: outcome ? outcome.nextCursor : prev[scope.key],
                 }));
                 if (outcome) {
-                    nextBatch = await loadByFilter(filter, nextOffset);
+                    // Re-read from the same local position; the sync only added
+                    // rows further down the order.
+                    nextBatch = await loadByFilter(filter, cursor);
                 }
             }
         }
@@ -229,47 +294,52 @@ export default function HomeFeed() {
         }
         if (nextBatch.length > 0) {
             setArticles((prev) => [...prev, ...nextBatch]);
-            setPage((prev) => prev + 1);
+            setCursor(cursorAfter(nextBatch));
         }
         setLoadingMore(false);
-    }, [loadingMore, hasMore, searchOpen, page, filter, loadByFilter, networkCursors, getToken]);
+    }, [loadingMore, hasMore, searchOpen, cursor, filter, loadByFilter, networkCursors, getToken]);
 
-    const handleEllipsisPress = useCallback((id: string) => {
-        const fetchArticle = async () => {
-            const db = await getDb();
-            const article = (await db.getFirstAsync('SELECT * FROM articles WHERE id = ?', [id])) as Article;
-            if (article) {
-                setModalArticle(article);
-            }
-        };
-        fetchArticle();
-    }, []);
-
-    useEffect(() => {
-        if (modalArticle) {
-            setModalSaved(modalArticle.saved === 1);
-            setShowModal(true);
-        }
-    }, [modalArticle]);
-
-    const handleToggleSave = useCallback(async () => {
-        if (!modalArticle) return;
-        const db = await getDb();
-        const newSaved = modalSaved ? 0 : 1;
-        await db.runAsync('UPDATE articles SET saved = ? WHERE id = ?', [newSaved, modalArticle.id]);
-        setModalSaved(!modalSaved);
-    }, [modalArticle, modalSaved]);
-
-    const handleModalOpenInBrowser = useCallback(async () => {
-        if (!modalArticle) return;
-        const supported = await Linking.canOpenURL(modalArticle.url);
-        if (supported) await Linking.openURL(modalArticle.url);
-    }, [modalArticle]);
+    const handleEllipsisPress = useCallback(
+        (id: string) => {
+            // The row is already in state from rendering the card, so the sheet
+            // can open on this tick rather than after a SQLite round trip.
+            const article = articles.find((item) => item.id === id);
+            if (!article) return;
+            actionSheet.open({
+                article,
+                saved: article.saved === 1,
+                onToggleSave: async (next) => {
+                    const db = await getDb();
+                    await db.runAsync('UPDATE articles SET saved = ? WHERE id = ?', [
+                        next ? 1 : 0,
+                        article.id,
+                    ]);
+                    setArticles((prev) =>
+                        prev.map((item) =>
+                            item.id === article.id ? { ...item, saved: next ? 1 : 0 } : item,
+                        ),
+                    );
+                },
+                onOpenInBrowser: async () => {
+                    const supported = await Linking.canOpenURL(article.url);
+                    if (supported) await Linking.openURL(article.url);
+                },
+                onBlocked: (domain) => {
+                    setArticles((prev) => prev.filter((item) => domainForArticle(item) !== domain));
+                },
+            });
+        },
+        [articles, actionSheet],
+    );
 
     const animateContent = useCallback(() => {
         Animated.parallel([
             Animated.timing(fadeAnimArticles, { toValue: 1, duration: 350, useNativeDriver: true }),
-            Animated.timing(slideAnimArticles, { toValue: 0, duration: 350, useNativeDriver: true }),
+            Animated.timing(slideAnimArticles, {
+                toValue: 0,
+                duration: 350,
+                useNativeDriver: true,
+            }),
         ]).start();
     }, [fadeAnimArticles, slideAnimArticles]);
 
@@ -281,14 +351,22 @@ export default function HomeFeed() {
     const toggleMenu = useCallback(() => {
         const opening = !visible;
         setVisible(opening);
-        Animated.timing(heightAnim, { toValue: opening ? 1 : 0, duration: 120, useNativeDriver: true }).start();
+        Animated.timing(heightAnim, {
+            toValue: opening ? 1 : 0,
+            duration: 120,
+            useNativeDriver: true,
+        }).start();
     }, [visible, heightAnim]);
 
     // Search
     const toggleSearch = useCallback(() => {
         const opening = !searchOpen;
         setSearchOpen(opening);
-        Animated.timing(searchAnim, { toValue: opening ? 1 : 0, duration: 200, useNativeDriver: false }).start(() => {
+        Animated.timing(searchAnim, {
+            toValue: opening ? 1 : 0,
+            duration: 200,
+            useNativeDriver: false,
+        }).start(() => {
             if (opening) {
                 searchInputRef.current?.focus();
             } else {
@@ -343,6 +421,21 @@ export default function HomeFeed() {
                 resetContentAnim();
                 animateContent();
             }
+            // The sheet reads `saved` straight from list state now, so refresh it
+            // in case the article screen changed it while we were away.
+            (async () => {
+                const db = await getDb();
+                const rows = (await db.getAllAsync('SELECT id FROM articles WHERE saved = 1')) as {
+                    id: string;
+                }[];
+                const savedIds = new Set(rows.map((row) => row.id));
+                setArticles((prev) =>
+                    prev.map((item) => {
+                        const saved = savedIds.has(item.id) ? 1 : 0;
+                        return item.saved === saved ? item : { ...item, saved };
+                    }),
+                );
+            })();
         }, [resetContentAnim, animateContent]),
     );
 
@@ -352,9 +445,9 @@ export default function HomeFeed() {
             try {
                 const existingPreferences = await AsyncStorage.getItem('genreSelection');
                 await syncAndCaptureCursors(existingPreferences);
-                const loadedArticles = await loadByFilter('Home', 0);
+                const loadedArticles = await loadByFilter('Home');
                 setArticles(loadedArticles);
-                setPage(0);
+                setCursor(cursorAfter(loadedArticles));
                 setHasMore(loadedArticles.length >= PAGE_SIZE);
             } catch (error) {
                 console.error(`Error occurred: ${error}`);
@@ -372,9 +465,9 @@ export default function HomeFeed() {
         const applyFilter = async () => {
             setLoading(true);
             try {
-                const filtered = await loadByFilter(filter, 0);
+                const filtered = await loadByFilter(filter);
                 setArticles(filtered);
-                setPage(0);
+                setCursor(cursorAfter(filtered));
                 setHasMore(filtered.length >= PAGE_SIZE);
             } catch (error) {
                 console.error(`Error occurred: ${error}`);
@@ -392,7 +485,10 @@ export default function HomeFeed() {
     });
 
     const EmptyState = () => (
-        <ReAnimated.View entering={FadeIn.duration(500)} style={empty_styles.container}>
+        <ReAnimated.View
+            entering={withMotion(scale, () => FadeIn.duration(scaleMs(scale, 500)))}
+            style={empty_styles.container}
+        >
             <Text style={empty_styles.title}>
                 {searchOpen && searchQuery.length > 0 ? 'No results' : 'No articles yet'}
             </Text>
@@ -442,12 +538,22 @@ export default function HomeFeed() {
 
                                 <Animated.View
                                     pointerEvents={visible ? 'auto' : 'none'}
-                                    style={[menu_styles.dropdown, { transform: [{ scaleY: heightAnim }], opacity: heightAnim }]}
+                                    style={[
+                                        menu_styles.dropdown,
+                                        {
+                                            transform: [{ scaleY: heightAnim }],
+                                            opacity: heightAnim,
+                                        },
+                                    ]}
                                 >
                                     <FilterMenu
                                         setFilter={(f) => {
                                             setFilter(f);
-                                            Animated.timing(heightAnim, { toValue: 0, duration: 100, useNativeDriver: true }).start();
+                                            Animated.timing(heightAnim, {
+                                                toValue: 0,
+                                                duration: 100,
+                                                useNativeDriver: true,
+                                            }).start();
                                             setVisible(false);
                                         }}
                                         activeFilter={filter}
@@ -458,9 +564,19 @@ export default function HomeFeed() {
                     />
                     <HeaderRule />
 
-                    <Animated.View style={[search_styles.bar_wrapper, { height: searchBarHeight, opacity: searchAnim }]}>
+                    <Animated.View
+                        style={[
+                            search_styles.bar_wrapper,
+                            { height: searchBarHeight, opacity: searchAnim },
+                        ]}
+                    >
                         <View style={search_styles.bar}>
-                            <FontAwesomeIcon icon={faMagnifyingGlass} size={13} color="white" style={{ opacity: 0.25, marginRight: 10 }} />
+                            <FontAwesomeIcon
+                                icon={faMagnifyingGlass}
+                                size={13}
+                                color="white"
+                                style={{ opacity: 0.25, marginRight: 10 }}
+                            />
                             <TextInput
                                 ref={searchInputRef}
                                 style={search_styles.input}
@@ -475,7 +591,12 @@ export default function HomeFeed() {
                             />
                             {searchQuery.length > 0 && (
                                 <TouchableOpacity onPress={handleSearchClear} hitSlop={10}>
-                                    <FontAwesomeIcon icon={faCircleXmark} size={14} color="white" style={{ opacity: 0.25 }} />
+                                    <FontAwesomeIcon
+                                        icon={faCircleXmark}
+                                        size={14}
+                                        color="white"
+                                        style={{ opacity: 0.25 }}
+                                    />
                                 </TouchableOpacity>
                             )}
                         </View>
@@ -490,10 +611,18 @@ export default function HomeFeed() {
                     {loading && articles.length === 0 ? (
                         <View style={empty_styles.container}>
                             <ActivityIndicator size="large" color={theme.accent} />
-                            <Text style={[empty_styles.subtitle, { marginTop: 16 }]}>Loading articles...</Text>
+                            <Text style={[empty_styles.subtitle, { marginTop: 16 }]}>
+                                Loading articles...
+                            </Text>
                         </View>
                     ) : (
-                        <Animated.View style={{ opacity: fadeAnimArticles, transform: [{ translateY: slideAnimArticles }], flex: 1 }}>
+                        <Animated.View
+                            style={{
+                                opacity: fadeAnimArticles,
+                                transform: [{ translateY: slideAnimArticles }],
+                                flex: 1,
+                            }}
+                        >
                             <FlatList
                                 ref={flatListRef}
                                 showsVerticalScrollIndicator={false}
@@ -503,8 +632,12 @@ export default function HomeFeed() {
                                 scrollEventThrottle={100}
                                 contentContainerStyle={
                                     articles.length === 0
-                                        ? { flexGrow: 1, justifyContent: 'center' }
-                                        : { flexGrow: 1, paddingBottom: 130 }
+                                        ? {
+                                              flexGrow: 1,
+                                              justifyContent: 'center',
+                                              paddingBottom: TAB_BAR_INSET,
+                                          }
+                                        : { flexGrow: 1, paddingBottom: TAB_BAR_INSET }
                                 }
                                 bounces={true}
                                 alwaysBounceVertical={true}
@@ -531,7 +664,11 @@ export default function HomeFeed() {
                                     ) : null
                                 }
                                 refreshControl={
-                                    <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.accent} />
+                                    <RefreshControl
+                                        refreshing={refreshing}
+                                        onRefresh={onRefresh}
+                                        tintColor={theme.accent}
+                                    />
                                 }
                             />
                         </Animated.View>
@@ -539,21 +676,19 @@ export default function HomeFeed() {
 
                     <Animated.View
                         pointerEvents={showScrollTop ? 'auto' : 'none'}
-                        style={[fab_styles.container, { opacity: scrollTopAnim, transform: [{ scale: scrollTopAnim }] }]}
+                        style={[
+                            fab_styles.container,
+                            { opacity: scrollTopAnim, transform: [{ scale: scrollTopAnim }] },
+                        ]}
                     >
-                        <TouchableOpacity onPress={scrollToTop} activeOpacity={0.8} style={fab_styles.button}>
+                        <TouchableOpacity
+                            onPress={scrollToTop}
+                            activeOpacity={0.8}
+                            style={fab_styles.button}
+                        >
                             <FontAwesomeIcon icon={faArrowUp} size={16} color="white" />
                         </TouchableOpacity>
                     </Animated.View>
-
-                    <ArticleActionSheet
-                        visible={showModal}
-                        onClose={() => setShowModal(false)}
-                        article={modalArticle}
-                        saved={modalSaved}
-                        onToggleSave={handleToggleSave}
-                        onOpenInBrowser={handleModalOpenInBrowser}
-                    />
                 </View>
             </SafeAreaView>
         </SafeAreaProvider>

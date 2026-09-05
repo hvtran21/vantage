@@ -7,8 +7,10 @@ import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Animated, { FadeIn, FadeInDown, FadeInUp } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
-import { initializeDatabase } from './components/database';
-import { theme, topicColors } from './components/styles';
+import { initializeDatabase } from '@/lib/database';
+import { theme, topicColors } from '@/components/styles';
+import { useMotion } from '@/components/Motion';
+import { scaleMs, withMotion } from '@/lib/motion';
 
 enum options {
     AI = 'Artificial Intelligence',
@@ -31,6 +33,7 @@ export default function WelcomePage() {
     const [userGenreSelection, setUserGenreSelection] = useState<string[]>([]);
     const genre_arr = Object.values(options) as string[];
     const insets = useSafeAreaInsets();
+    const { scale } = useMotion();
 
     const toggleGenre = (genre: string) => {
         setUserGenreSelection((prev) => {
@@ -68,23 +71,29 @@ export default function WelcomePage() {
                     showsVerticalScrollIndicator={false}
                 >
                     <Animated.View
-                        entering={FadeInDown.duration(700)}
+                        entering={withMotion(scale, () => FadeInDown.duration(scaleMs(scale, 700)))}
                         style={welcomeStyles.title_container}
                     >
                         <Text style={welcomeStyles.wordmark}>VANTAGE</Text>
                         <Text style={welcomeStyles.main_title}>Stay{'\n'}updated.</Text>
-                        <Text style={welcomeStyles.subtitle_italic}>Just the headlines that matter.</Text>
+                        <Text style={welcomeStyles.subtitle_italic}>
+                            Just the headlines that matter.
+                        </Text>
                     </Animated.View>
 
                     <Animated.View
-                        entering={FadeIn.duration(800).delay(300)}
+                        entering={withMotion(scale, () =>
+                            FadeIn.duration(scaleMs(scale, 800)).delay(scaleMs(scale, 300)),
+                        )}
                         style={welcomeStyles.preference_header}
                     >
                         <Text style={welcomeStyles.section_label}>CHOOSE YOUR INTERESTS</Text>
                     </Animated.View>
 
                     <Animated.View
-                        entering={FadeInUp.duration(600).delay(500)}
+                        entering={withMotion(scale, () =>
+                            FadeInUp.duration(scaleMs(scale, 600)).delay(scaleMs(scale, 500)),
+                        )}
                         style={welcomeStyles.genre_container}
                     >
                         {genre_arr.map((item, index) => {
@@ -97,22 +106,28 @@ export default function WelcomePage() {
                                     activeOpacity={0.7}
                                 >
                                     <Animated.View
-                                        entering={FadeIn.duration(400).delay(500 + index * 60)}
+                                        entering={withMotion(scale, () =>
+                                            FadeIn.duration(scaleMs(scale, 400)).delay(
+                                                scaleMs(scale, 500 + index * 60),
+                                            ),
+                                        )}
                                         style={[
                                             welcomeStyles.chip,
-                                            isSelected && tc && {
-                                                backgroundColor: tc.bg,
-                                                borderColor: tc.color + '40',
-                                            },
+                                            isSelected &&
+                                                tc && {
+                                                    backgroundColor: tc.bg,
+                                                    borderColor: tc.color + '40',
+                                                },
                                         ]}
                                     >
                                         <Text
                                             style={[
                                                 welcomeStyles.chip_text,
-                                                isSelected && tc && {
-                                                    color: tc.color,
-                                                    fontFamily: 'WorkSans-SemiBold',
-                                                },
+                                                isSelected &&
+                                                    tc && {
+                                                        color: tc.color,
+                                                        fontFamily: 'WorkSans-SemiBold',
+                                                    },
                                             ]}
                                         >
                                             {item}
@@ -124,7 +139,9 @@ export default function WelcomePage() {
                     </Animated.View>
 
                     <Animated.View
-                        entering={FadeIn.duration(600).delay(800)}
+                        entering={withMotion(scale, () =>
+                            FadeIn.duration(scaleMs(scale, 600)).delay(scaleMs(scale, 800)),
+                        )}
                         style={welcomeStyles.info_container}
                     >
                         <Text style={welcomeStyles.info_text}>Select as many as you like</Text>
@@ -135,7 +152,9 @@ export default function WelcomePage() {
                 </ScrollView>
 
                 <Animated.View
-                    entering={FadeIn.duration(400).delay(1000)}
+                    entering={withMotion(scale, () =>
+                        FadeIn.duration(scaleMs(scale, 400)).delay(scaleMs(scale, 1000)),
+                    )}
                     style={{
                         paddingHorizontal: 24,
                         paddingBottom: insets.bottom + 24,
@@ -154,16 +173,14 @@ export default function WelcomePage() {
                             style={welcomeStyles.submit_gradient}
                         >
                             <Text style={welcomeStyles.submit_text}>Get started</Text>
-                            <FontAwesomeIcon
-                                icon={faArrowRight}
-                                size={16}
-                                color="white"
-                            />
+                            <FontAwesomeIcon icon={faArrowRight} size={16} color="white" />
                         </LinearGradient>
                     </TouchableOpacity>
 
                     {userGenreSelection.length > 0 && (
-                        <Animated.View entering={FadeIn.duration(200)}>
+                        <Animated.View
+                            entering={withMotion(scale, () => FadeIn.duration(scaleMs(scale, 200)))}
+                        >
                             <Text style={welcomeStyles.selection_count}>
                                 {userGenreSelection.length} selected
                             </Text>

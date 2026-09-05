@@ -4,18 +4,20 @@ import { SafeAreaView, SafeAreaProvider } from 'react-native-safe-area-context';
 import { useFocusEffect } from 'expo-router';
 import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
 import { faBookmark } from '@fortawesome/free-solid-svg-icons';
-import Article from '../components/constants';
-import { ArticleActionSheet } from '../components/ArticleActionSheet';
-import { getDb } from '../components/database';
-import { getSavedArticles } from '../components/services';
-import { NewsCard } from '../components/NewsCard';
-import { TabHeader, HeaderRule, HorizonalLine, theme } from '../components/styles';
+import Article from '@/lib/constants';
+import { useActionSheet } from '@/components/ArticleActionSheet';
+import { getDb } from '@/lib/database';
+import { getSavedArticles } from '@/lib/services';
+import { NewsCard } from '@/components/NewsCard';
+import { TabHeader, HeaderRule, HorizonalLine, theme, TAB_BAR_INSET } from '@/components/styles';
+import { useMotion } from '@/components/Motion';
+import { scaleMs, withMotion } from '@/lib/motion';
 import Animated, { FadeIn } from 'react-native-reanimated';
 
 export default function SavedScreen() {
     const [savedArticles, setSavedArticles] = useState<Article[]>([]);
-    const [showModal, setShowModal] = useState(false);
-    const [modalArticle, setModalArticle] = useState<Article>();
+    const actionSheet = useActionSheet();
+    const { scale } = useMotion();
 
     useFocusEffect(
         useCallback(() => {
@@ -27,36 +29,41 @@ export default function SavedScreen() {
         }, []),
     );
 
-    const handleEllipsisPress = useCallback((id: string) => {
-        const fetchArticle = async () => {
-            const db = await getDb();
-            const article = (await db.getFirstAsync('SELECT * FROM articles WHERE id = ?', [id])) as Article;
-            if (article) {
-                setModalArticle(article);
-                setShowModal(true);
-            }
-        };
-        fetchArticle();
-    }, []);
-
-    const handleUnsave = async () => {
-        if (!modalArticle) return;
-        const db = await getDb();
-        await db.runAsync('UPDATE articles SET saved = 0 WHERE id = ?', modalArticle.id);
-        const updated = await getSavedArticles();
-        setSavedArticles(updated);
-    };
-
-    const handleOpenInBrowser = async () => {
-        if (!modalArticle) return;
-        const supported = await Linking.canOpenURL(modalArticle.url);
-        if (supported) await Linking.openURL(modalArticle.url);
-    };
+    const handleEllipsisPress = useCallback(
+        (id: string) => {
+            // Already in state from rendering the row, so the sheet opens on this
+            // tick. Everything in this list is saved by definition.
+            const article = savedArticles.find((item) => item.id === id);
+            if (!article) return;
+            actionSheet.open({
+                article,
+                saved: true,
+                onToggleSave: async () => {
+                    const db = await getDb();
+                    await db.runAsync('UPDATE articles SET saved = 0 WHERE id = ?', article.id);
+                    setSavedArticles(await getSavedArticles());
+                },
+                onOpenInBrowser: async () => {
+                    const supported = await Linking.canOpenURL(article.url);
+                    if (supported) await Linking.openURL(article.url);
+                },
+            });
+        },
+        [savedArticles, actionSheet],
+    );
 
     const EmptyState = () => (
-        <Animated.View entering={FadeIn.duration(500)} style={styles.empty_container}>
+        <Animated.View
+            entering={withMotion(scale, () => FadeIn.duration(scaleMs(scale, 500)))}
+            style={styles.empty_container}
+        >
             <View style={styles.empty_icon_circle}>
-                <FontAwesomeIcon icon={faBookmark} size={28} color="white" style={{ opacity: 0.12 }} />
+                <FontAwesomeIcon
+                    icon={faBookmark}
+                    size={28}
+                    color="white"
+                    style={{ opacity: 0.12 }}
+                />
             </View>
             <Text style={styles.empty_title}>Nothing saved yet</Text>
             <Text style={styles.empty_subtitle}>
@@ -86,8 +93,12 @@ export default function SavedScreen() {
                     data={savedArticles}
                     contentContainerStyle={
                         savedArticles.length === 0
-                            ? { flexGrow: 1, justifyContent: 'center' }
-                            : { flexGrow: 1, paddingBottom: 130 }
+                            ? {
+                                  flexGrow: 1,
+                                  justifyContent: 'center',
+                                  paddingBottom: TAB_BAR_INSET,
+                              }
+                            : { flexGrow: 1, paddingBottom: TAB_BAR_INSET }
                     }
                     ListEmptyComponent={<EmptyState />}
                     ItemSeparatorComponent={() => <HorizonalLine />}
@@ -102,15 +113,6 @@ export default function SavedScreen() {
                         />
                     )}
                     keyExtractor={(item) => item.id}
-                />
-
-                <ArticleActionSheet
-                    visible={showModal}
-                    onClose={() => setShowModal(false)}
-                    article={modalArticle}
-                    saved
-                    onToggleSave={handleUnsave}
-                    onOpenInBrowser={handleOpenInBrowser}
                 />
             </SafeAreaView>
         </SafeAreaProvider>
