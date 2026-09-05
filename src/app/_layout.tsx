@@ -6,6 +6,7 @@ import { tokenCache } from '@clerk/expo/token-cache';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ActionSheetProvider } from '@/components/ArticleActionSheet';
+import { PrincipalSync } from '@/components/PrincipalSync';
 import { MotionProvider, useMotion } from '@/components/Motion';
 import { theme } from '@/components/styles';
 
@@ -49,6 +50,7 @@ export default function RootLayout() {
         <GestureHandlerRootView style={{ flex: 1 }}>
             <ClerkProvider publishableKey={publishableKey} tokenCache={tokenCache}>
                 <ClerkLoaded>
+                    <PrincipalSync />
                     {/* Above the Stack, so the action sheet covers the tab bar. */}
                     <SafeAreaProvider>
                         <MotionProvider>

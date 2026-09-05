@@ -1,8 +1,9 @@
 import Article from '@/lib/constants';
 import { getDb } from '@/lib/database';
 import { updateArticleQueryTime } from '@/lib/utilities';
+import { principalHeaders } from '@/lib/principal';
 
-const BASE_URL = process.env.EXPO_PUBLIC_BASE_URL || 'http://localhost:8081';
+export const BASE_URL = process.env.EXPO_PUBLIC_BASE_URL || 'http://localhost:8081';
 
 export async function syncArticles(genre?: string, category?: string, cursor?: string, token?: string) {
     try {
@@ -117,7 +118,9 @@ export async function fetchAndCacheArticles(
             method: 'GET',
             headers: {
                 Accept: 'application/json',
-                ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                // Signed in or not, the request carries a principal so the server
+                // can scope results to it.
+                ...(await principalHeaders(token)),
             },
         });
 
