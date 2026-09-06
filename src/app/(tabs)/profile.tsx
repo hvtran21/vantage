@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useMemo, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import { SafeAreaView, SafeAreaProvider } from 'react-native-safe-area-context';
 import { useFocusEffect, router } from 'expo-router';
@@ -6,7 +6,8 @@ import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
 import { faUser, faCheck, faSignOutAlt, faSignInAlt } from '@fortawesome/free-solid-svg-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useUser, useAuth } from '@clerk/expo';
-import { TabHeader, HeaderRule, theme, topicColors } from '@/components/styles';
+import { TabHeader, HeaderRule } from '@/components/styles';
+import { topicColors, useTheme, type Theme } from '@/components/Theme';
 import {
     listBlocked,
     listReportedDomains,
@@ -40,6 +41,8 @@ function GenrePreferences() {
     const [saved, setSaved] = useState(false);
     const [loaded, setLoaded] = useState(false);
     const { scale } = useMotion();
+    const theme = useTheme();
+    const styles = useMemo(() => makeStyles(theme), [theme]);
 
     useFocusEffect(
         useCallback(() => {
@@ -140,6 +143,8 @@ const MOTION_OPTIONS: { value: MotionPreference; label: string }[] = [
 
 function MotionPreferences() {
     const { preference, setPreference } = useMotion();
+    const theme = useTheme();
+    const styles = useMemo(() => makeStyles(theme), [theme]);
     return (
         <View style={styles.section}>
             <Text style={styles.section_label}>MOTION</Text>
@@ -179,6 +184,8 @@ function ProfileCard({
     email: string;
     signedIn: boolean;
 }) {
+    const theme = useTheme();
+    const styles = useMemo(() => makeStyles(theme), [theme]);
     return (
         <View style={styles.profile_card}>
             {displayName ? (
@@ -211,6 +218,8 @@ function ProfileCard({
 // section would show the same domain twice.
 function BlockedSources() {
     const { isSignedIn, getToken } = useAuth();
+    const theme = useTheme();
+    const styles = useMemo(() => makeStyles(theme), [theme]);
     const [sources, setSources] = useState<BlockedSource[]>([]);
     const [reported, setReported] = useState<string[]>([]);
 
@@ -310,6 +319,8 @@ function BlockedSources() {
 export default function ProfileScreen() {
     const { user } = useUser();
     const { signOut } = useAuth();
+    const theme = useTheme();
+    const styles = useMemo(() => makeStyles(theme), [theme]);
     const isSignedIn = !!user;
 
     const handleSignOut = async () => {
@@ -382,218 +393,219 @@ export default function ProfileScreen() {
     );
 }
 
-const styles = StyleSheet.create({
-    theme: {
-        flex: 1,
-        backgroundColor: theme.bg,
-    },
-    scroll_content: {
-        paddingHorizontal: 20,
-        paddingTop: 20,
-        paddingBottom: 140,
-    },
-    section: {
-        marginBottom: 32,
-    },
-    section_header: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 10,
-    },
-    section_label: {
-        fontFamily: 'WorkSans-SemiBold',
-        fontSize: 11,
-        color: theme.text_tertiary,
-        letterSpacing: 2,
-        marginBottom: 12,
-    },
-    section_hint: {
-        fontFamily: 'WorkSans-Light',
-        fontSize: 13,
-        color: theme.text_tertiary,
-        marginTop: -6,
-        marginBottom: 14,
-    },
-    saved_inline: {
-        position: 'absolute',
-        right: 0,
-        top: 0,
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 4,
-    },
-    saved_inline_text: {
-        fontFamily: 'WorkSans-Regular',
-        fontSize: 12,
-        color: '#4ade80',
-    },
-    source_row: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        gap: 12,
-        paddingVertical: 12,
-        borderBottomWidth: StyleSheet.hairlineWidth,
-        borderBottomColor: theme.border,
-    },
-    // Without this the first domain sits 26pt below the hint, where every other
-    // section's content starts at 14.
-    source_row_first: {
-        paddingTop: 0,
-    },
-    // A rule under the last row reads as a section divider that isn't one; the
-    // feed's own list omits its separator the same way.
-    source_row_last: {
-        borderBottomWidth: 0,
-    },
-    source_info: {
-        flex: 1,
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 8,
-    },
-    source_domain: {
-        flexShrink: 1,
-        fontFamily: 'WorkSans-Regular',
-        // 14 matches the other list/control labels on this screen; 15 was off-scale.
-        fontSize: 14,
-        color: theme.text,
-    },
-    reported_badge: {
-        backgroundColor: 'rgba(239, 68, 68, 0.10)',
-        borderRadius: 4,
-        paddingHorizontal: 6,
-        paddingVertical: 2,
-    },
-    reported_text: {
-        fontFamily: 'WorkSans-SemiBold',
-        fontSize: 11,
-        letterSpacing: 0.8,
-        color: theme.danger,
-    },
-    // Padded to a 44pt target rather than relying on hitSlop alone, which left
-    // it the smallest tappable thing on the screen.
-    unblock_hit: {
-        justifyContent: 'center',
-        minHeight: 44,
-        paddingLeft: 12,
-    },
-    unblock_text: {
-        fontFamily: 'WorkSans-SemiBold',
-        fontSize: 13,
-        color: theme.accent,
-    },
-    chip_container: {
-        flexWrap: 'wrap',
-        flexDirection: 'row',
-        gap: 8,
-    },
-    motion_row: {
-        flexDirection: 'row',
-        gap: 8,
-    },
-    motion_option: {
-        flex: 1,
-        paddingVertical: 12,
-        borderRadius: 12,
-        alignItems: 'center',
-        justifyContent: 'center',
-        backgroundColor: theme.surface,
-        borderWidth: 1,
-        borderColor: theme.border,
-    },
-    motion_option_active: {
-        backgroundColor: theme.accent_soft,
-        borderColor: theme.accent_border,
-    },
-    motion_option_text: {
-        fontFamily: 'WorkSans-Regular',
-        fontSize: 14,
-        color: theme.text_secondary,
-    },
-    motion_option_text_active: {
-        fontFamily: 'WorkSans-SemiBold',
-        color: theme.accent,
-    },
-    chip: {
-        backgroundColor: theme.surface,
-        height: 42,
-        justifyContent: 'center',
-        alignItems: 'center',
-        borderRadius: 21,
-        paddingHorizontal: 18,
-        borderWidth: 1,
-        borderColor: theme.border,
-    },
-    chip_text: {
-        color: theme.text_secondary,
-        fontFamily: 'WorkSans-Regular',
-        fontSize: 14,
-    },
-    profile_card: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: theme.surface,
-        borderRadius: 16,
-        borderWidth: 1,
-        borderColor: theme.border,
-        padding: 16,
-    },
-    card_avatar_filled: {
-        width: 44,
-        height: 44,
-        borderRadius: 22,
-        backgroundColor: theme.accent_soft,
-        borderWidth: 1,
-        borderColor: theme.accent_border,
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginRight: 14,
-    },
-    card_avatar_initial: {
-        fontFamily: 'WorkSans-Bold',
-        fontSize: 18,
-        color: theme.accent,
-    },
-    card_avatar_empty: {
-        width: 44,
-        height: 44,
-        borderRadius: 22,
-        backgroundColor: theme.elevated,
-        borderWidth: 1,
-        borderColor: theme.border,
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginRight: 14,
-    },
-    card_info: {
-        flex: 1,
-    },
-    card_name: {
-        fontFamily: 'WorkSans-SemiBold',
-        fontSize: 16,
-        color: theme.text,
-    },
-    card_email: {
-        fontFamily: 'WorkSans-Light',
-        fontSize: 13,
-        color: theme.text_tertiary,
-        marginTop: 2,
-    },
-    sign_out_button: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: 8,
-        marginTop: 12,
-        paddingVertical: 14,
-        borderRadius: 14,
-        borderWidth: 1,
-        borderColor: theme.border,
-    },
-    sign_out_text: {
-        fontFamily: 'WorkSans-SemiBold',
-        fontSize: 14,
-        color: theme.danger,
-    },
-});
+const makeStyles = (theme: Theme) =>
+    StyleSheet.create({
+        theme: {
+            flex: 1,
+            backgroundColor: theme.bg,
+        },
+        scroll_content: {
+            paddingHorizontal: 20,
+            paddingTop: 20,
+            paddingBottom: 140,
+        },
+        section: {
+            marginBottom: 32,
+        },
+        section_header: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 10,
+        },
+        section_label: {
+            fontFamily: 'WorkSans-SemiBold',
+            fontSize: 11,
+            color: theme.text_tertiary,
+            letterSpacing: 2,
+            marginBottom: 12,
+        },
+        section_hint: {
+            fontFamily: 'WorkSans-Light',
+            fontSize: 13,
+            color: theme.text_tertiary,
+            marginTop: -6,
+            marginBottom: 14,
+        },
+        saved_inline: {
+            position: 'absolute',
+            right: 0,
+            top: 0,
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 4,
+        },
+        saved_inline_text: {
+            fontFamily: 'WorkSans-Regular',
+            fontSize: 12,
+            color: '#4ade80',
+        },
+        source_row: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 12,
+            paddingVertical: 12,
+            borderBottomWidth: StyleSheet.hairlineWidth,
+            borderBottomColor: theme.border,
+        },
+        // Without this the first domain sits 26pt below the hint, where every other
+        // section's content starts at 14.
+        source_row_first: {
+            paddingTop: 0,
+        },
+        // A rule under the last row reads as a section divider that isn't one; the
+        // feed's own list omits its separator the same way.
+        source_row_last: {
+            borderBottomWidth: 0,
+        },
+        source_info: {
+            flex: 1,
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 8,
+        },
+        source_domain: {
+            flexShrink: 1,
+            fontFamily: 'WorkSans-Regular',
+            // 14 matches the other list/control labels on this screen; 15 was off-scale.
+            fontSize: 14,
+            color: theme.text,
+        },
+        reported_badge: {
+            backgroundColor: 'rgba(239, 68, 68, 0.10)',
+            borderRadius: 4,
+            paddingHorizontal: 6,
+            paddingVertical: 2,
+        },
+        reported_text: {
+            fontFamily: 'WorkSans-SemiBold',
+            fontSize: 11,
+            letterSpacing: 0.8,
+            color: theme.danger,
+        },
+        // Padded to a 44pt target rather than relying on hitSlop alone, which left
+        // it the smallest tappable thing on the screen.
+        unblock_hit: {
+            justifyContent: 'center',
+            minHeight: 44,
+            paddingLeft: 12,
+        },
+        unblock_text: {
+            fontFamily: 'WorkSans-SemiBold',
+            fontSize: 13,
+            color: theme.accent,
+        },
+        chip_container: {
+            flexWrap: 'wrap',
+            flexDirection: 'row',
+            gap: 8,
+        },
+        motion_row: {
+            flexDirection: 'row',
+            gap: 8,
+        },
+        motion_option: {
+            flex: 1,
+            paddingVertical: 12,
+            borderRadius: 12,
+            alignItems: 'center',
+            justifyContent: 'center',
+            backgroundColor: theme.surface,
+            borderWidth: 1,
+            borderColor: theme.border,
+        },
+        motion_option_active: {
+            backgroundColor: theme.accent_soft,
+            borderColor: theme.accent_border,
+        },
+        motion_option_text: {
+            fontFamily: 'WorkSans-Regular',
+            fontSize: 14,
+            color: theme.text_secondary,
+        },
+        motion_option_text_active: {
+            fontFamily: 'WorkSans-SemiBold',
+            color: theme.accent,
+        },
+        chip: {
+            backgroundColor: theme.surface,
+            height: 42,
+            justifyContent: 'center',
+            alignItems: 'center',
+            borderRadius: 21,
+            paddingHorizontal: 18,
+            borderWidth: 1,
+            borderColor: theme.border,
+        },
+        chip_text: {
+            color: theme.text_secondary,
+            fontFamily: 'WorkSans-Regular',
+            fontSize: 14,
+        },
+        profile_card: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            backgroundColor: theme.surface,
+            borderRadius: 16,
+            borderWidth: 1,
+            borderColor: theme.border,
+            padding: 16,
+        },
+        card_avatar_filled: {
+            width: 44,
+            height: 44,
+            borderRadius: 22,
+            backgroundColor: theme.accent_soft,
+            borderWidth: 1,
+            borderColor: theme.accent_border,
+            justifyContent: 'center',
+            alignItems: 'center',
+            marginRight: 14,
+        },
+        card_avatar_initial: {
+            fontFamily: 'WorkSans-Bold',
+            fontSize: 18,
+            color: theme.accent,
+        },
+        card_avatar_empty: {
+            width: 44,
+            height: 44,
+            borderRadius: 22,
+            backgroundColor: theme.elevated,
+            borderWidth: 1,
+            borderColor: theme.border,
+            justifyContent: 'center',
+            alignItems: 'center',
+            marginRight: 14,
+        },
+        card_info: {
+            flex: 1,
+        },
+        card_name: {
+            fontFamily: 'WorkSans-SemiBold',
+            fontSize: 16,
+            color: theme.text,
+        },
+        card_email: {
+            fontFamily: 'WorkSans-Light',
+            fontSize: 13,
+            color: theme.text_tertiary,
+            marginTop: 2,
+        },
+        sign_out_button: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 8,
+            marginTop: 12,
+            paddingVertical: 14,
+            borderRadius: 14,
+            borderWidth: 1,
+            borderColor: theme.border,
+        },
+        sign_out_text: {
+            fontFamily: 'WorkSans-SemiBold',
+            fontSize: 14,
+            color: theme.danger,
+        },
+    });

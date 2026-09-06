@@ -2,10 +2,10 @@ import { Text, View, StyleSheet, TouchableOpacity } from 'react-native';
 import { Image } from 'expo-image';
 import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
 import { faEllipsisVertical } from '@fortawesome/free-solid-svg-icons';
-import { useState, useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { router } from 'expo-router';
 import Animated, { FadeIn } from 'react-native-reanimated';
-import { theme, getTopicColor } from '@/components/styles';
+import { getTopicColor, useTheme, type Theme } from '@/components/Theme';
 import { useMotion } from '@/components/Motion';
 import { scaleMs, withMotion } from '@/lib/motion';
 
@@ -90,11 +90,13 @@ export const NewsCard = ({
 }: CardFrontProps) => {
     const [imageError, setImageError] = useState(false);
     const { scale } = useMotion();
+    const theme = useTheme();
+    const card_style = useMemo(() => makeCardStyle(theme), [theme]);
 
     const time = relativeTime(published_at);
     const imageSource = url_to_image && !imageError ? { uri: url_to_image } : fallBackImage;
     const label = genre === '' ? 'Top' : genre;
-    const topicColor = getTopicColor(label);
+    const topicColor = getTopicColor(label, theme);
 
     useEffect(() => {
         if (url_to_image) {
@@ -153,71 +155,72 @@ export const NewsCard = ({
     );
 };
 
-export const card_style = StyleSheet.create({
-    main_card: {
-        paddingHorizontal: 20,
-        paddingVertical: 16,
-    },
-    card_touchable: {
-        flexDirection: 'row',
-        alignItems: 'center',
-    },
-    text_column: {
-        flex: 1,
-        paddingRight: 16,
-    },
-    tag_row: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginBottom: 8,
-        marginLeft: -1,
-        gap: 8,
-    },
-    tag_pill: {
-        backgroundColor: theme.accent_soft,
-        paddingHorizontal: 8,
-        paddingVertical: 3,
-        borderRadius: 6,
-    },
-    tag_text: {
-        fontFamily: 'WorkSans-SemiBold',
-        fontSize: 11,
-        color: theme.accent,
-        letterSpacing: 0.3,
-        textTransform: 'uppercase',
-    },
-    time_text: {
-        fontFamily: 'WorkSans-Light',
-        fontSize: 12,
-        color: theme.text_tertiary,
-    },
-    card_title: {
-        color: theme.text,
-        fontSize: 17,
-        fontFamily: 'WorkSans-Regular',
-        lineHeight: 24,
-        letterSpacing: -0.2,
-    },
-    thumbnail_frame: {
-        width: 96,
-        height: 96,
-    },
-    thumbnail_image: {
-        width: '100%',
-        height: '100%',
-        borderRadius: 14,
-    },
-    ellipsis_btn: {
-        position: 'absolute',
-        bottom: 5,
-        right: 5,
-        width: 18,
-        height: 18,
-        borderRadius: 9,
-        backgroundColor: 'rgba(0, 0, 0, 0.45)',
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-});
+const makeCardStyle = (theme: Theme) =>
+    StyleSheet.create({
+        main_card: {
+            paddingHorizontal: 20,
+            paddingVertical: 16,
+        },
+        card_touchable: {
+            flexDirection: 'row',
+            alignItems: 'center',
+        },
+        text_column: {
+            flex: 1,
+            paddingRight: 16,
+        },
+        tag_row: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            marginBottom: 8,
+            marginLeft: -1,
+            gap: 8,
+        },
+        tag_pill: {
+            backgroundColor: theme.accent_soft,
+            paddingHorizontal: 8,
+            paddingVertical: 3,
+            borderRadius: 6,
+        },
+        tag_text: {
+            fontFamily: 'WorkSans-SemiBold',
+            fontSize: 11,
+            color: theme.accent,
+            letterSpacing: 0.3,
+            textTransform: 'uppercase',
+        },
+        time_text: {
+            fontFamily: 'WorkSans-Light',
+            fontSize: 12,
+            color: theme.text_tertiary,
+        },
+        card_title: {
+            color: theme.text,
+            fontSize: 17,
+            fontFamily: 'WorkSans-Regular',
+            lineHeight: 24,
+            letterSpacing: -0.2,
+        },
+        thumbnail_frame: {
+            width: 96,
+            height: 96,
+        },
+        thumbnail_image: {
+            width: '100%',
+            height: '100%',
+            borderRadius: 14,
+        },
+        ellipsis_btn: {
+            position: 'absolute',
+            bottom: 5,
+            right: 5,
+            width: 18,
+            height: 18,
+            borderRadius: 9,
+            backgroundColor: 'rgba(0, 0, 0, 0.45)',
+            justifyContent: 'center',
+            alignItems: 'center',
+        },
+    });
 
 export default NewsCard;

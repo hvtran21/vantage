@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { View, Text, StyleSheet, FlatList, Linking } from 'react-native';
 import { SafeAreaView, SafeAreaProvider } from 'react-native-safe-area-context';
 import { useFocusEffect } from 'expo-router';
@@ -9,7 +9,8 @@ import { useActionSheet } from '@/components/ArticleActionSheet';
 import { getDb } from '@/lib/database';
 import { getSavedArticles } from '@/lib/services';
 import { NewsCard } from '@/components/NewsCard';
-import { TabHeader, HeaderRule, HorizonalLine, theme, TAB_BAR_INSET } from '@/components/styles';
+import { TabHeader, HeaderRule, HorizonalLine, TAB_BAR_INSET } from '@/components/styles';
+import { useTheme, type Theme } from '@/components/Theme';
 import { useMotion } from '@/components/Motion';
 import { scaleMs, withMotion } from '@/lib/motion';
 import Animated, { FadeIn } from 'react-native-reanimated';
@@ -18,6 +19,8 @@ export default function SavedScreen() {
     const [savedArticles, setSavedArticles] = useState<Article[]>([]);
     const actionSheet = useActionSheet();
     const { scale } = useMotion();
+    const theme = useTheme();
+    const styles = useMemo(() => makeStyles(theme), [theme]);
 
     useFocusEffect(
         useCallback(() => {
@@ -119,48 +122,49 @@ export default function SavedScreen() {
     );
 }
 
-const styles = StyleSheet.create({
-    theme: {
-        flex: 1,
-        backgroundColor: theme.bg,
-    },
-    count_badge: {
-        backgroundColor: theme.accent_soft,
-        borderRadius: 8,
-        paddingHorizontal: 10,
-        paddingVertical: 4,
-    },
-    count_text: {
-        fontFamily: 'WorkSans-SemiBold',
-        fontSize: 13,
-        color: theme.accent,
-    },
-    empty_container: {
-        flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
-        paddingHorizontal: 48,
-    },
-    empty_icon_circle: {
-        width: 72,
-        height: 72,
-        borderRadius: 36,
-        backgroundColor: theme.surface,
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginBottom: 20,
-    },
-    empty_title: {
-        fontFamily: 'WorkSans-SemiBold',
-        fontSize: 18,
-        color: theme.text_secondary,
-        marginBottom: 8,
-    },
-    empty_subtitle: {
-        fontFamily: 'WorkSans-Light',
-        fontSize: 14,
-        color: theme.text_tertiary,
-        textAlign: 'center',
-        lineHeight: 20,
-    },
-});
+const makeStyles = (theme: Theme) =>
+    StyleSheet.create({
+        theme: {
+            flex: 1,
+            backgroundColor: theme.bg,
+        },
+        count_badge: {
+            backgroundColor: theme.accent_soft,
+            borderRadius: 8,
+            paddingHorizontal: 10,
+            paddingVertical: 4,
+        },
+        count_text: {
+            fontFamily: 'WorkSans-SemiBold',
+            fontSize: 13,
+            color: theme.accent,
+        },
+        empty_container: {
+            flex: 1,
+            justifyContent: 'center',
+            alignItems: 'center',
+            paddingHorizontal: 48,
+        },
+        empty_icon_circle: {
+            width: 72,
+            height: 72,
+            borderRadius: 36,
+            backgroundColor: theme.surface,
+            justifyContent: 'center',
+            alignItems: 'center',
+            marginBottom: 20,
+        },
+        empty_title: {
+            fontFamily: 'WorkSans-SemiBold',
+            fontSize: 18,
+            color: theme.text_secondary,
+            marginBottom: 8,
+        },
+        empty_subtitle: {
+            fontFamily: 'WorkSans-Light',
+            fontSize: 14,
+            color: theme.text_tertiary,
+            textAlign: 'center',
+            lineHeight: 20,
+        },
+    });

@@ -1,5 +1,5 @@
 import { useLocalSearchParams, router } from 'expo-router';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import {
     View,
     Text,
@@ -25,7 +25,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import Article from '@/lib/constants';
 import { getDb } from '@/lib/database';
 import { formatDate } from '@/components/NewsCard';
-import { theme, getTopicColor } from '@/components/styles';
+import { getTopicColor, useTheme, type Theme } from '@/components/Theme';
 import { stripHtml } from '@/lib/utilities';
 import { useMotion } from '@/components/Motion';
 import { scaleMs, withMotion } from '@/lib/motion';
@@ -50,6 +50,8 @@ export default function ArticleDetail() {
     const pendingBrowserUrl = useRef<string | null>(null);
     const insets = useSafeAreaInsets();
     const { scale } = useMotion();
+    const theme = useTheme();
+    const styles = useMemo(() => makeStyles(theme), [theme]);
 
     useEffect(() => {
         const loadArticle = async () => {
@@ -114,7 +116,7 @@ export default function ArticleDetail() {
         article.url_to_image && !imageError ? { uri: article.url_to_image } : fallBackImage;
     const date = formatDate(new Date(article.published_at));
     const label = article.genre || article.category || 'Top';
-    const topicColor = getTopicColor(label);
+    const topicColor = getTopicColor(label, theme);
 
     return (
         <SafeAreaProvider>
@@ -329,248 +331,249 @@ export default function ArticleDetail() {
     );
 }
 
-const styles = StyleSheet.create({
-    theme: {
-        flex: 1,
-        backgroundColor: theme.bg,
-    },
-    loading_container: {
-        flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    loading_text: {
-        fontFamily: 'WorkSans-Light',
-        fontSize: 16,
-        color: theme.text_tertiary,
-    },
-    hero_wrapper: {
-        width: '100%',
-        height: 300,
-    },
-    hero_image: {
-        width: '100%',
-        height: '100%',
-    },
-    hero_gradient: {
-        position: 'absolute',
-        bottom: 0,
-        left: 0,
-        right: 0,
-        height: '60%',
-    },
-    status_scrim: {
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        right: 0,
-        zIndex: 2,
-    },
-    nav_overlay: {
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        right: 0,
-        zIndex: 3,
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        paddingHorizontal: 16,
-        paddingVertical: 12,
-    },
-    nav_btn: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
-        backgroundColor: 'rgba(0, 0, 0, 0.35)',
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    meta_container: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingHorizontal: 24,
-        paddingTop: 4,
-        paddingBottom: 12,
-        flexWrap: 'wrap',
-        gap: 6,
-    },
-    tag_pill: {
-        backgroundColor: theme.accent_soft,
-        paddingHorizontal: 10,
-        paddingVertical: 4,
-        borderRadius: 6,
-    },
-    tag_text: {
-        fontFamily: 'WorkSans-SemiBold',
-        fontSize: 11,
-        color: theme.accent,
-        letterSpacing: 0.3,
-        textTransform: 'uppercase',
-    },
-    meta_dot: {
-        color: theme.text_tertiary,
-        fontSize: 12,
-    },
-    meta_date: {
-        fontFamily: 'WorkSans-Light',
-        fontSize: 13,
-        color: theme.text_tertiary,
-    },
-    source_text: {
-        fontFamily: 'WorkSans-SemiBold',
-        fontSize: 13,
-        color: theme.accent,
-        opacity: 0.8,
-    },
-    content_block: {
-        paddingHorizontal: 24,
-        paddingTop: 4,
-    },
-    title: {
-        fontFamily: 'WorkSans-Bold',
-        fontSize: 28,
-        color: theme.text,
-        lineHeight: 36,
-        letterSpacing: -0.5,
-    },
-    author_text: {
-        fontFamily: 'WorkSans-LightItalic',
-        fontSize: 14,
-        color: theme.text_tertiary,
-        marginTop: 2,
-    },
-    description: {
-        fontFamily: 'WorkSans-Regular',
-        fontSize: 17,
-        color: 'rgba(255, 255, 255, 0.72)',
-        lineHeight: 27,
-        marginTop: 10,
-    },
-    content: {
-        fontFamily: 'WorkSans-Light',
-        fontSize: 16,
-        color: theme.text_secondary,
-        lineHeight: 25,
-        marginTop: 10,
-    },
-    browser_button: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        backgroundColor: theme.accent,
-        borderRadius: 14,
-        paddingVertical: 16,
-        marginTop: 28,
-    },
-    browser_button_text: {
-        fontFamily: 'WorkSans-SemiBold',
-        fontSize: 16,
-        color: 'white',
-    },
-    modal_backdrop: {
-        flex: 1,
-        backgroundColor: 'rgba(0, 0, 0, 0.65)',
-        justifyContent: 'center',
-        alignItems: 'center',
-        paddingHorizontal: 24,
-    },
-    modal_card: {
-        width: '100%',
-        maxWidth: 400,
-        maxHeight: '80%',
-        backgroundColor: theme.elevated,
-        borderRadius: 24,
-        paddingTop: 20,
-        paddingBottom: 20,
-        paddingHorizontal: 24,
-    },
-    modal_close_btn: {
-        position: 'absolute',
-        top: 12,
-        right: 12,
-        width: 32,
-        height: 32,
-        borderRadius: 16,
-        backgroundColor: 'rgba(255, 255, 255, 0.06)',
-        justifyContent: 'center',
-        alignItems: 'center',
-        zIndex: 1,
-    },
-    modal_scroll_content: {
-        alignItems: 'center',
-        paddingTop: 16,
-        paddingBottom: 20,
-    },
-    modal_icon_circle: {
-        width: 52,
-        height: 52,
-        borderRadius: 26,
-        backgroundColor: theme.accent_soft,
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginBottom: 16,
-    },
-    modal_title: {
-        fontFamily: 'WorkSans-Bold',
-        fontSize: 19,
-        color: theme.text,
-        marginBottom: 6,
-        textAlign: 'center',
-    },
-    modal_subtitle: {
-        fontFamily: 'WorkSans-Regular',
-        fontSize: 14,
-        color: theme.text_secondary,
-        textAlign: 'center',
-        marginBottom: 16,
-    },
-    modal_url_box: {
-        width: '100%',
-        backgroundColor: theme.surface,
-        borderRadius: 14,
-        borderWidth: StyleSheet.hairlineWidth,
-        borderColor: theme.border,
-        paddingVertical: 14,
-        paddingHorizontal: 16,
-    },
-    modal_url_host: {
-        fontFamily: 'WorkSans-SemiBold',
-        fontSize: 15,
-        color: theme.accent,
-        marginBottom: 4,
-    },
-    modal_url_text: {
-        fontFamily: 'WorkSans-Regular',
-        fontSize: 13,
-        color: theme.text_secondary,
-        lineHeight: 18,
-    },
-    modal_actions: {
-        flexDirection: 'row',
-        gap: 12,
-    },
-    modal_button: {
-        flex: 1,
-        paddingVertical: 14,
-        borderRadius: 14,
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    modal_button_secondary: {
-        backgroundColor: 'rgba(255, 255, 255, 0.06)',
-    },
-    modal_button_secondary_text: {
-        fontFamily: 'WorkSans-SemiBold',
-        fontSize: 15,
-        color: theme.text,
-    },
-    modal_button_primary: {
-        backgroundColor: theme.accent,
-    },
-    modal_button_primary_text: {
-        fontFamily: 'WorkSans-SemiBold',
-        fontSize: 15,
-        color: 'white',
-    },
-});
+const makeStyles = (theme: Theme) =>
+    StyleSheet.create({
+        theme: {
+            flex: 1,
+            backgroundColor: theme.bg,
+        },
+        loading_container: {
+            flex: 1,
+            justifyContent: 'center',
+            alignItems: 'center',
+        },
+        loading_text: {
+            fontFamily: 'WorkSans-Light',
+            fontSize: 16,
+            color: theme.text_tertiary,
+        },
+        hero_wrapper: {
+            width: '100%',
+            height: 300,
+        },
+        hero_image: {
+            width: '100%',
+            height: '100%',
+        },
+        hero_gradient: {
+            position: 'absolute',
+            bottom: 0,
+            left: 0,
+            right: 0,
+            height: '60%',
+        },
+        status_scrim: {
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            zIndex: 2,
+        },
+        nav_overlay: {
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            zIndex: 3,
+            flexDirection: 'row',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            paddingHorizontal: 16,
+            paddingVertical: 12,
+        },
+        nav_btn: {
+            width: 40,
+            height: 40,
+            borderRadius: 20,
+            backgroundColor: 'rgba(0, 0, 0, 0.35)',
+            justifyContent: 'center',
+            alignItems: 'center',
+        },
+        meta_container: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            paddingHorizontal: 24,
+            paddingTop: 4,
+            paddingBottom: 12,
+            flexWrap: 'wrap',
+            gap: 6,
+        },
+        tag_pill: {
+            backgroundColor: theme.accent_soft,
+            paddingHorizontal: 10,
+            paddingVertical: 4,
+            borderRadius: 6,
+        },
+        tag_text: {
+            fontFamily: 'WorkSans-SemiBold',
+            fontSize: 11,
+            color: theme.accent,
+            letterSpacing: 0.3,
+            textTransform: 'uppercase',
+        },
+        meta_dot: {
+            color: theme.text_tertiary,
+            fontSize: 12,
+        },
+        meta_date: {
+            fontFamily: 'WorkSans-Light',
+            fontSize: 13,
+            color: theme.text_tertiary,
+        },
+        source_text: {
+            fontFamily: 'WorkSans-SemiBold',
+            fontSize: 13,
+            color: theme.accent,
+            opacity: 0.8,
+        },
+        content_block: {
+            paddingHorizontal: 24,
+            paddingTop: 4,
+        },
+        title: {
+            fontFamily: 'WorkSans-Bold',
+            fontSize: 28,
+            color: theme.text,
+            lineHeight: 36,
+            letterSpacing: -0.5,
+        },
+        author_text: {
+            fontFamily: 'WorkSans-LightItalic',
+            fontSize: 14,
+            color: theme.text_tertiary,
+            marginTop: 2,
+        },
+        description: {
+            fontFamily: 'WorkSans-Regular',
+            fontSize: 17,
+            color: 'rgba(255, 255, 255, 0.72)',
+            lineHeight: 27,
+            marginTop: 10,
+        },
+        content: {
+            fontFamily: 'WorkSans-Light',
+            fontSize: 16,
+            color: theme.text_secondary,
+            lineHeight: 25,
+            marginTop: 10,
+        },
+        browser_button: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'center',
+            backgroundColor: theme.accent,
+            borderRadius: 14,
+            paddingVertical: 16,
+            marginTop: 28,
+        },
+        browser_button_text: {
+            fontFamily: 'WorkSans-SemiBold',
+            fontSize: 16,
+            color: 'white',
+        },
+        modal_backdrop: {
+            flex: 1,
+            backgroundColor: 'rgba(0, 0, 0, 0.65)',
+            justifyContent: 'center',
+            alignItems: 'center',
+            paddingHorizontal: 24,
+        },
+        modal_card: {
+            width: '100%',
+            maxWidth: 400,
+            maxHeight: '80%',
+            backgroundColor: theme.elevated,
+            borderRadius: 24,
+            paddingTop: 20,
+            paddingBottom: 20,
+            paddingHorizontal: 24,
+        },
+        modal_close_btn: {
+            position: 'absolute',
+            top: 12,
+            right: 12,
+            width: 32,
+            height: 32,
+            borderRadius: 16,
+            backgroundColor: 'rgba(255, 255, 255, 0.06)',
+            justifyContent: 'center',
+            alignItems: 'center',
+            zIndex: 1,
+        },
+        modal_scroll_content: {
+            alignItems: 'center',
+            paddingTop: 16,
+            paddingBottom: 20,
+        },
+        modal_icon_circle: {
+            width: 52,
+            height: 52,
+            borderRadius: 26,
+            backgroundColor: theme.accent_soft,
+            justifyContent: 'center',
+            alignItems: 'center',
+            marginBottom: 16,
+        },
+        modal_title: {
+            fontFamily: 'WorkSans-Bold',
+            fontSize: 19,
+            color: theme.text,
+            marginBottom: 6,
+            textAlign: 'center',
+        },
+        modal_subtitle: {
+            fontFamily: 'WorkSans-Regular',
+            fontSize: 14,
+            color: theme.text_secondary,
+            textAlign: 'center',
+            marginBottom: 16,
+        },
+        modal_url_box: {
+            width: '100%',
+            backgroundColor: theme.surface,
+            borderRadius: 14,
+            borderWidth: StyleSheet.hairlineWidth,
+            borderColor: theme.border,
+            paddingVertical: 14,
+            paddingHorizontal: 16,
+        },
+        modal_url_host: {
+            fontFamily: 'WorkSans-SemiBold',
+            fontSize: 15,
+            color: theme.accent,
+            marginBottom: 4,
+        },
+        modal_url_text: {
+            fontFamily: 'WorkSans-Regular',
+            fontSize: 13,
+            color: theme.text_secondary,
+            lineHeight: 18,
+        },
+        modal_actions: {
+            flexDirection: 'row',
+            gap: 12,
+        },
+        modal_button: {
+            flex: 1,
+            paddingVertical: 14,
+            borderRadius: 14,
+            justifyContent: 'center',
+            alignItems: 'center',
+        },
+        modal_button_secondary: {
+            backgroundColor: 'rgba(255, 255, 255, 0.06)',
+        },
+        modal_button_secondary_text: {
+            fontFamily: 'WorkSans-SemiBold',
+            fontSize: 15,
+            color: theme.text,
+        },
+        modal_button_primary: {
+            backgroundColor: theme.accent,
+        },
+        modal_button_primary_text: {
+            fontFamily: 'WorkSans-SemiBold',
+            fontSize: 15,
+            color: 'white',
+        },
+    });

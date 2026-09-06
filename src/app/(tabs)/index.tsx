@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import {
     View,
     Text,
@@ -20,7 +20,8 @@ import { useAuth } from '@clerk/expo';
 import { useActionSheet } from '@/components/ArticleActionSheet';
 import { getDb } from '@/lib/database';
 import { NewsCard } from '@/components/NewsCard';
-import { TabHeader, HeaderRule, HorizonalLine, theme, TAB_BAR_INSET } from '@/components/styles';
+import { TabHeader, HeaderRule, HorizonalLine, TAB_BAR_INSET } from '@/components/styles';
+import { useTheme, type Theme } from '@/components/Theme';
 import {
     faHouse,
     faAngleDown,
@@ -57,6 +58,8 @@ type MenuOptionProp = {
 };
 
 const MenuOption = ({ title, selected, icon, onPress }: MenuOptionProp) => {
+    const theme = useTheme();
+    const menu_styles = useMemo(() => makeMenuStyles(theme), [theme]);
     return (
         <TouchableHighlight
             onPress={onPress}
@@ -93,6 +96,8 @@ interface MenuFilterProp {
 }
 
 const FilterMenu = ({ setFilter, activeFilter }: MenuFilterProp) => {
+    const theme = useTheme();
+    const menu_styles = useMemo(() => makeMenuStyles(theme), [theme]);
     return (
         <View style={menu_styles.menu_inner}>
             <MenuOption
@@ -136,6 +141,12 @@ const getNetworkScope = (
 
 export default function HomeFeed() {
     const { getToken } = useAuth();
+    const theme = useTheme();
+    const empty_styles = useMemo(() => makeEmptyStyles(theme), [theme]);
+    const search_styles = useMemo(() => makeSearchStyles(theme), [theme]);
+    const menu_styles = useMemo(() => makeMenuStyles(theme), [theme]);
+    const fab_styles = useMemo(() => makeFabStyles(theme), [theme]);
+    const base_template = useMemo(() => makeBaseTemplate(theme), [theme]);
     const [articles, setArticles] = useState<Article[]>([]);
     const [loading, setLoading] = useState(true);
     const [filter, setFilter] = useState('Home');
@@ -380,19 +391,23 @@ export default function HomeFeed() {
         });
     }, [searchOpen, searchAnim]);
 
-    const handleSearchChange = useCallback((text: string) => {
-        setSearchQuery(text);
-        if (debounceTimer.current) clearTimeout(debounceTimer.current);
-        debounceTimer.current = setTimeout(async () => {
-            if (text.trim().length === 0) {
-                if (preSearchArticles.current.length > 0) setArticles(preSearchArticles.current);
-                return;
-            }
-            const token = (await getToken()) ?? undefined;
-            const results = await searchArticles(text.trim(), token);
-            setArticles(results);
-        }, 300);
-    }, [getToken]);
+    const handleSearchChange = useCallback(
+        (text: string) => {
+            setSearchQuery(text);
+            if (debounceTimer.current) clearTimeout(debounceTimer.current);
+            debounceTimer.current = setTimeout(async () => {
+                if (text.trim().length === 0) {
+                    if (preSearchArticles.current.length > 0)
+                        setArticles(preSearchArticles.current);
+                    return;
+                }
+                const token = (await getToken()) ?? undefined;
+                const results = await searchArticles(text.trim(), token);
+                setArticles(results);
+            }, 300);
+        },
+        [getToken],
+    );
 
     const handleSearchOpen = useCallback(() => {
         preSearchArticles.current = articles;
@@ -696,167 +711,172 @@ export default function HomeFeed() {
     );
 }
 
-const empty_styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
-        paddingHorizontal: 40,
-    },
-    title: {
-        fontFamily: 'WorkSans-SemiBold',
-        fontSize: 18,
-        color: theme.text_secondary,
-        marginBottom: 6,
-    },
-    subtitle: {
-        fontFamily: 'WorkSans-Light',
-        fontSize: 14,
-        color: theme.text_tertiary,
-        textAlign: 'center',
-    },
-});
+const makeEmptyStyles = (theme: Theme) =>
+    StyleSheet.create({
+        container: {
+            flex: 1,
+            justifyContent: 'center',
+            alignItems: 'center',
+            paddingHorizontal: 40,
+        },
+        title: {
+            fontFamily: 'WorkSans-SemiBold',
+            fontSize: 18,
+            color: theme.text_secondary,
+            marginBottom: 6,
+        },
+        subtitle: {
+            fontFamily: 'WorkSans-Light',
+            fontSize: 14,
+            color: theme.text_tertiary,
+            textAlign: 'center',
+        },
+    });
 
-const search_styles = StyleSheet.create({
-    icon_btn: {
-        width: 36,
-        height: 36,
-        borderRadius: 10,
-        backgroundColor: theme.surface,
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    bar_wrapper: {
-        overflow: 'hidden',
-        paddingHorizontal: 20,
-    },
-    bar: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: theme.surface,
-        borderRadius: 12,
-        paddingHorizontal: 14,
-        paddingVertical: 12,
-        borderWidth: 1,
-        borderColor: theme.border,
-    },
-    input: {
-        flex: 1,
-        fontFamily: 'WorkSans-Regular',
-        fontSize: 15,
-        color: 'white',
-        padding: 0,
-    },
-});
+const makeSearchStyles = (theme: Theme) =>
+    StyleSheet.create({
+        icon_btn: {
+            width: 36,
+            height: 36,
+            borderRadius: 10,
+            backgroundColor: theme.surface,
+            justifyContent: 'center',
+            alignItems: 'center',
+        },
+        bar_wrapper: {
+            overflow: 'hidden',
+            paddingHorizontal: 20,
+        },
+        bar: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            backgroundColor: theme.surface,
+            borderRadius: 12,
+            paddingHorizontal: 14,
+            paddingVertical: 12,
+            borderWidth: 1,
+            borderColor: theme.border,
+        },
+        input: {
+            flex: 1,
+            fontFamily: 'WorkSans-Regular',
+            fontSize: 15,
+            color: 'white',
+            padding: 0,
+        },
+    });
 
-const menu_styles = StyleSheet.create({
-    trigger: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: theme.surface,
-        borderRadius: 10,
-        paddingHorizontal: 14,
-        paddingVertical: 8,
-        gap: 6,
-        borderWidth: 1,
-        borderColor: theme.border,
-    },
-    trigger_text: {
-        fontFamily: 'WorkSans-Regular',
-        fontSize: 13,
-        color: theme.text_secondary,
-    },
-    option_text: {
-        opacity: 0.6,
-        fontFamily: 'WorkSans-Regular',
-        fontSize: 15,
-        color: 'white',
-    },
-    option_row: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingVertical: 11,
-        paddingHorizontal: 14,
-        borderRadius: 10,
-    },
-    option_selected: {
-        backgroundColor: theme.accent_soft,
-    },
-    icon_wrapper: {
-        width: 20,
-        height: 20,
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginRight: 10,
-    },
-    menu_inner: {
-        padding: 6,
-    },
-    dropdown: {
-        position: 'absolute',
-        top: 44,
-        right: 0,
-        backgroundColor: theme.elevated,
-        borderRadius: 14,
-        borderWidth: 1,
-        borderColor: theme.border,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 8 },
-        shadowOpacity: 0.4,
-        shadowRadius: 16,
-        elevation: 12,
-        zIndex: 10,
-        width: 150,
-        transformOrigin: 'top right',
-        overflow: 'hidden',
-    },
-    backdrop: {
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        zIndex: 5,
-    },
-});
+const makeMenuStyles = (theme: Theme) =>
+    StyleSheet.create({
+        trigger: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            backgroundColor: theme.surface,
+            borderRadius: 10,
+            paddingHorizontal: 14,
+            paddingVertical: 8,
+            gap: 6,
+            borderWidth: 1,
+            borderColor: theme.border,
+        },
+        trigger_text: {
+            fontFamily: 'WorkSans-Regular',
+            fontSize: 13,
+            color: theme.text_secondary,
+        },
+        option_text: {
+            opacity: 0.6,
+            fontFamily: 'WorkSans-Regular',
+            fontSize: 15,
+            color: 'white',
+        },
+        option_row: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            paddingVertical: 11,
+            paddingHorizontal: 14,
+            borderRadius: 10,
+        },
+        option_selected: {
+            backgroundColor: theme.accent_soft,
+        },
+        icon_wrapper: {
+            width: 20,
+            height: 20,
+            justifyContent: 'center',
+            alignItems: 'center',
+            marginRight: 10,
+        },
+        menu_inner: {
+            padding: 6,
+        },
+        dropdown: {
+            position: 'absolute',
+            top: 44,
+            right: 0,
+            backgroundColor: theme.elevated,
+            borderRadius: 14,
+            borderWidth: 1,
+            borderColor: theme.border,
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 8 },
+            shadowOpacity: 0.4,
+            shadowRadius: 16,
+            elevation: 12,
+            zIndex: 10,
+            width: 150,
+            transformOrigin: 'top right',
+            overflow: 'hidden',
+        },
+        backdrop: {
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            zIndex: 5,
+        },
+    });
 
-const fab_styles = StyleSheet.create({
-    container: {
-        position: 'absolute',
-        bottom: 148,
-        right: 20,
-        zIndex: 20,
-    },
-    button: {
-        width: 44,
-        height: 44,
-        borderRadius: 22,
-        backgroundColor: theme.accent,
-        justifyContent: 'center',
-        alignItems: 'center',
-        shadowColor: theme.accent,
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.4,
-        shadowRadius: 12,
-        elevation: 8,
-    },
-});
+const makeFabStyles = (theme: Theme) =>
+    StyleSheet.create({
+        container: {
+            position: 'absolute',
+            bottom: 148,
+            right: 20,
+            zIndex: 20,
+        },
+        button: {
+            width: 44,
+            height: 44,
+            borderRadius: 22,
+            backgroundColor: theme.accent,
+            justifyContent: 'center',
+            alignItems: 'center',
+            shadowColor: theme.accent,
+            shadowOffset: { width: 0, height: 4 },
+            shadowOpacity: 0.4,
+            shadowRadius: 12,
+            elevation: 8,
+        },
+    });
 
-const base_template = StyleSheet.create({
-    theme: {
-        flex: 1,
-        backgroundColor: theme.bg,
-    },
-    config: {
-        flex: 1,
-        width: '100%',
-        flexDirection: 'column',
-    },
-    header_actions: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 10,
-        overflow: 'visible',
-        zIndex: 10,
-    },
-});
+const makeBaseTemplate = (theme: Theme) =>
+    StyleSheet.create({
+        theme: {
+            flex: 1,
+            backgroundColor: theme.bg,
+        },
+        config: {
+            flex: 1,
+            width: '100%',
+            flexDirection: 'column',
+        },
+        header_actions: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 10,
+            overflow: 'visible',
+            zIndex: 10,
+        },
+    });

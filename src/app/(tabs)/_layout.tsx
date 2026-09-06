@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Tabs } from 'expo-router';
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
@@ -16,7 +16,7 @@ import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { theme } from '@/components/styles';
+import { useTheme, type Theme } from '@/components/Theme';
 
 const INDICATOR_INSET = 6;
 const SLIDE = { damping: 18, stiffness: 190, mass: 0.6 };
@@ -29,6 +29,8 @@ const BLURRED = Platform.OS === 'ios' || ANDROID_BLUR;
 // bottom padding that can't be overridden cleanly, so we own the layout instead.
 function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
     const insets = useSafeAreaInsets();
+    const theme = useTheme();
+    const tab_styles = useMemo(() => makeTabStyles(theme), [theme]);
     const [pillWidth, setPillWidth] = useState(0);
     const itemWidth = pillWidth ? pillWidth / state.routes.length : 0;
 
@@ -175,60 +177,61 @@ export default function TabLayout() {
     );
 }
 
-const tab_styles = StyleSheet.create({
-    // Positioned + shadowed here; no overflow so the shadow isn't clipped.
-    wrapper: {
-        position: 'absolute',
-        left: 20,
-        right: 20,
-        height: 72,
-        borderRadius: 26,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 8 },
-        shadowOpacity: 0.45,
-        shadowRadius: 18,
-        elevation: 14,
-    },
-    // Clips the blur + rounds the corners; separate from wrapper's shadow.
-    pill: {
-        flex: 1,
-        flexDirection: 'row',
-        borderRadius: 26,
-        overflow: 'hidden',
-        borderWidth: StyleSheet.hairlineWidth,
-        borderColor: Platform.select({
-            ios: 'rgba(255,255,255,0.14)',
-            default: 'rgba(255,255,255,0.20)',
-        }),
-        // Translucent only where a real blur backs it.
-        backgroundColor:
-            Platform.OS === 'ios'
-                ? 'transparent'
-                : ANDROID_BLUR
-                  ? 'rgba(14, 14, 14, 0.45)'
-                  : theme.elevated,
-    },
-    indicator: {
-        position: 'absolute',
-        top: 8,
-        bottom: 8,
-        borderRadius: 28,
-        backgroundColor: theme.accent_soft,
-        borderWidth: StyleSheet.hairlineWidth,
-        borderColor: theme.accent_border,
-    },
-    item: {
-        flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
-        gap: 4,
-    },
-    label: {
-        fontFamily: 'WorkSans-Regular',
-        fontSize: 10,
-        letterSpacing: 0.3,
-    },
-    label_focused: {
-        fontFamily: 'WorkSans-SemiBold',
-    },
-});
+const makeTabStyles = (theme: Theme) =>
+    StyleSheet.create({
+        // Positioned + shadowed here; no overflow so the shadow isn't clipped.
+        wrapper: {
+            position: 'absolute',
+            left: 20,
+            right: 20,
+            height: 72,
+            borderRadius: 26,
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 8 },
+            shadowOpacity: 0.45,
+            shadowRadius: 18,
+            elevation: 14,
+        },
+        // Clips the blur + rounds the corners; separate from wrapper's shadow.
+        pill: {
+            flex: 1,
+            flexDirection: 'row',
+            borderRadius: 26,
+            overflow: 'hidden',
+            borderWidth: StyleSheet.hairlineWidth,
+            borderColor: Platform.select({
+                ios: 'rgba(255,255,255,0.14)',
+                default: 'rgba(255,255,255,0.20)',
+            }),
+            // Translucent only where a real blur backs it.
+            backgroundColor:
+                Platform.OS === 'ios'
+                    ? 'transparent'
+                    : ANDROID_BLUR
+                      ? 'rgba(14, 14, 14, 0.45)'
+                      : theme.elevated,
+        },
+        indicator: {
+            position: 'absolute',
+            top: 8,
+            bottom: 8,
+            borderRadius: 28,
+            backgroundColor: theme.accent_soft,
+            borderWidth: StyleSheet.hairlineWidth,
+            borderColor: theme.accent_border,
+        },
+        item: {
+            flex: 1,
+            justifyContent: 'center',
+            alignItems: 'center',
+            gap: 4,
+        },
+        label: {
+            fontFamily: 'WorkSans-Regular',
+            fontSize: 10,
+            letterSpacing: 0.3,
+        },
+        label_focused: {
+            fontFamily: 'WorkSans-SemiBold',
+        },
+    });

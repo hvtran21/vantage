@@ -1,6 +1,6 @@
 import { SafeAreaView, SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { router } from 'expo-router';
 import { faArrowRight } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
@@ -8,7 +8,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import Animated, { FadeIn, FadeInDown, FadeInUp } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
 import { initializeDatabase } from '@/lib/database';
-import { theme, topicColors } from '@/components/styles';
+import { topicColors, useTheme, type Theme } from '@/components/Theme';
 import { useMotion } from '@/components/Motion';
 import { scaleMs, withMotion } from '@/lib/motion';
 
@@ -34,6 +34,8 @@ export default function WelcomePage() {
     const genre_arr = Object.values(options) as string[];
     const insets = useSafeAreaInsets();
     const { scale } = useMotion();
+    const theme = useTheme();
+    const welcomeStyles = useMemo(() => makeWelcomeStyles(theme), [theme]);
 
     const toggleGenre = (genre: string) => {
         setUserGenreSelection((prev) => {
@@ -192,110 +194,111 @@ export default function WelcomePage() {
     );
 }
 
-const welcomeStyles = StyleSheet.create({
-    theme: {
-        flex: 1,
-        backgroundColor: theme.bg,
-    },
-    bg_gradient: {
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        right: 0,
-        height: 400,
-    },
-    scroll: {
-        flex: 1,
-    },
-    scroll_content: {
-        paddingBottom: 32,
-    },
-    title_container: {
-        paddingHorizontal: 28,
-        paddingTop: 48,
-    },
-    wordmark: {
-        fontFamily: 'WorkSans-SemiBold',
-        fontSize: 13,
-        color: theme.accent,
-        letterSpacing: 3,
-        marginBottom: 10,
-    },
-    main_title: {
-        fontFamily: 'WorkSans-Bold',
-        color: 'white',
-        fontSize: 52,
-        lineHeight: 58,
-        letterSpacing: -1.5,
-    },
-    subtitle_italic: {
-        fontFamily: 'WorkSans-LightItalic',
-        fontSize: 20,
-        color: theme.text_secondary,
-        marginTop: 8,
-    },
-    preference_header: {
-        paddingHorizontal: 28,
-        marginTop: 40,
-        marginBottom: 20,
-    },
-    section_label: {
-        fontFamily: 'WorkSans-SemiBold',
-        fontSize: 11,
-        color: theme.text_tertiary,
-        letterSpacing: 2,
-    },
-    genre_container: {
-        flexWrap: 'wrap',
-        flexDirection: 'row',
-        paddingHorizontal: 24,
-        gap: 8,
-    },
-    chip: {
-        backgroundColor: theme.surface,
-        height: 48,
-        justifyContent: 'center',
-        alignItems: 'center',
-        borderRadius: 24,
-        paddingHorizontal: 20,
-        borderWidth: 1,
-        borderColor: theme.border,
-    },
-    chip_text: {
-        color: theme.text_secondary,
-        fontFamily: 'WorkSans-Regular',
-        fontSize: 15,
-    },
-    info_container: {
-        alignItems: 'center',
-        marginTop: 36,
-    },
-    info_text: {
-        fontFamily: 'WorkSans-Light',
-        fontSize: 14,
-        color: theme.text_tertiary,
-    },
-    submit_button: {
-        borderRadius: 16,
-        overflow: 'hidden',
-    },
-    submit_gradient: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        paddingVertical: 18,
-        gap: 10,
-    },
-    submit_text: {
-        fontFamily: 'WorkSans-SemiBold',
-        fontSize: 17,
-        color: 'white',
-    },
-    selection_count: {
-        fontFamily: 'WorkSans-Light',
-        fontSize: 13,
-        color: theme.text_tertiary,
-        textAlign: 'center',
-        marginTop: 12,
-    },
-});
+const makeWelcomeStyles = (theme: Theme) =>
+    StyleSheet.create({
+        theme: {
+            flex: 1,
+            backgroundColor: theme.bg,
+        },
+        bg_gradient: {
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            height: 400,
+        },
+        scroll: {
+            flex: 1,
+        },
+        scroll_content: {
+            paddingBottom: 32,
+        },
+        title_container: {
+            paddingHorizontal: 28,
+            paddingTop: 48,
+        },
+        wordmark: {
+            fontFamily: 'WorkSans-SemiBold',
+            fontSize: 13,
+            color: theme.accent,
+            letterSpacing: 3,
+            marginBottom: 10,
+        },
+        main_title: {
+            fontFamily: 'WorkSans-Bold',
+            color: 'white',
+            fontSize: 52,
+            lineHeight: 58,
+            letterSpacing: -1.5,
+        },
+        subtitle_italic: {
+            fontFamily: 'WorkSans-LightItalic',
+            fontSize: 20,
+            color: theme.text_secondary,
+            marginTop: 8,
+        },
+        preference_header: {
+            paddingHorizontal: 28,
+            marginTop: 40,
+            marginBottom: 20,
+        },
+        section_label: {
+            fontFamily: 'WorkSans-SemiBold',
+            fontSize: 11,
+            color: theme.text_tertiary,
+            letterSpacing: 2,
+        },
+        genre_container: {
+            flexWrap: 'wrap',
+            flexDirection: 'row',
+            paddingHorizontal: 24,
+            gap: 8,
+        },
+        chip: {
+            backgroundColor: theme.surface,
+            height: 48,
+            justifyContent: 'center',
+            alignItems: 'center',
+            borderRadius: 24,
+            paddingHorizontal: 20,
+            borderWidth: 1,
+            borderColor: theme.border,
+        },
+        chip_text: {
+            color: theme.text_secondary,
+            fontFamily: 'WorkSans-Regular',
+            fontSize: 15,
+        },
+        info_container: {
+            alignItems: 'center',
+            marginTop: 36,
+        },
+        info_text: {
+            fontFamily: 'WorkSans-Light',
+            fontSize: 14,
+            color: theme.text_tertiary,
+        },
+        submit_button: {
+            borderRadius: 16,
+            overflow: 'hidden',
+        },
+        submit_gradient: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'center',
+            paddingVertical: 18,
+            gap: 10,
+        },
+        submit_text: {
+            fontFamily: 'WorkSans-SemiBold',
+            fontSize: 17,
+            color: 'white',
+        },
+        selection_count: {
+            fontFamily: 'WorkSans-Light',
+            fontSize: 13,
+            color: theme.text_tertiary,
+            textAlign: 'center',
+            marginTop: 12,
+        },
+    });

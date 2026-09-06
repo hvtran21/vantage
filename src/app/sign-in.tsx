@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
     View,
     Text,
@@ -16,11 +16,13 @@ import { router } from 'expo-router';
 import { useSignIn, useSignUp } from '@clerk/expo';
 import { LinearGradient } from 'expo-linear-gradient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { theme } from '@/components/styles';
+import { useTheme, type Theme } from '@/components/Theme';
 
 type Mode = 'sign-in' | 'sign-up';
 
 export default function SignInPage() {
+    const theme = useTheme();
+    const styles = useMemo(() => makeStyles(theme), [theme]);
     const [mode, setMode] = useState<Mode>('sign-in');
     const [emailAddress, setEmailAddress] = useState('');
     const [code, setCode] = useState('');
@@ -191,96 +193,97 @@ export default function SignInPage() {
     );
 }
 
-const styles = StyleSheet.create({
-    theme: {
-        flex: 1,
-        backgroundColor: theme.bg,
-    },
-    flex: {
-        flex: 1,
-    },
-    container: {
-        flex: 1,
-        justifyContent: 'center',
-        paddingHorizontal: 28,
-    },
-    wordmark: {
-        fontFamily: 'WorkSans-SemiBold',
-        fontSize: 13,
-        color: theme.accent,
-        letterSpacing: 3,
-        marginBottom: 16,
-    },
-    title: {
-        fontFamily: 'WorkSans-Bold',
-        color: 'white',
-        fontSize: 32,
-        letterSpacing: -0.5,
-        marginBottom: 24,
-    },
-    subtitle: {
-        fontFamily: 'WorkSans-Light',
-        fontSize: 15,
-        color: theme.text_secondary,
-        marginBottom: 20,
-    },
-    input: {
-        backgroundColor: theme.surface,
-        borderWidth: 1,
-        borderColor: theme.border,
-        borderRadius: 12,
-        paddingHorizontal: 18,
-        paddingVertical: 16,
-        fontFamily: 'WorkSans-Regular',
-        fontSize: 15,
-        color: theme.text,
-        marginBottom: 12,
-    },
-    error: {
-        fontFamily: 'WorkSans-Regular',
-        fontSize: 13,
-        color: theme.danger,
-        marginBottom: 12,
-    },
-    submit_button: {
-        borderRadius: 16,
-        overflow: 'hidden',
-        marginTop: 8,
-    },
-    submit_gradient: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        paddingVertical: 18,
-        gap: 10,
-    },
-    submit_text: {
-        fontFamily: 'WorkSans-SemiBold',
-        fontSize: 17,
-        color: 'white',
-    },
-    toggle: {
-        marginTop: 20,
-        alignItems: 'center',
-        justifyContent: 'center',
-        paddingVertical: 13,
-        borderRadius: 14,
-        borderWidth: 1,
-        borderColor: theme.accent_border,
-        backgroundColor: theme.accent_soft,
-    },
-    toggle_text: {
-        fontFamily: 'WorkSans-SemiBold',
-        fontSize: 15,
-        color: theme.accent,
-    },
-    skip: {
-        marginTop: 14,
-        alignItems: 'center',
-    },
-    skip_text: {
-        fontFamily: 'WorkSans-Regular',
-        fontSize: 13,
-        color: theme.text_tertiary,
-    },
-});
+const makeStyles = (theme: Theme) =>
+    StyleSheet.create({
+        theme: {
+            flex: 1,
+            backgroundColor: theme.bg,
+        },
+        flex: {
+            flex: 1,
+        },
+        container: {
+            flex: 1,
+            justifyContent: 'center',
+            paddingHorizontal: 28,
+        },
+        wordmark: {
+            fontFamily: 'WorkSans-SemiBold',
+            fontSize: 13,
+            color: theme.accent,
+            letterSpacing: 3,
+            marginBottom: 16,
+        },
+        title: {
+            fontFamily: 'WorkSans-Bold',
+            color: 'white',
+            fontSize: 32,
+            letterSpacing: -0.5,
+            marginBottom: 24,
+        },
+        subtitle: {
+            fontFamily: 'WorkSans-Light',
+            fontSize: 15,
+            color: theme.text_secondary,
+            marginBottom: 20,
+        },
+        input: {
+            backgroundColor: theme.surface,
+            borderWidth: 1,
+            borderColor: theme.border,
+            borderRadius: 12,
+            paddingHorizontal: 18,
+            paddingVertical: 16,
+            fontFamily: 'WorkSans-Regular',
+            fontSize: 15,
+            color: theme.text,
+            marginBottom: 12,
+        },
+        error: {
+            fontFamily: 'WorkSans-Regular',
+            fontSize: 13,
+            color: theme.danger,
+            marginBottom: 12,
+        },
+        submit_button: {
+            borderRadius: 16,
+            overflow: 'hidden',
+            marginTop: 8,
+        },
+        submit_gradient: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'center',
+            paddingVertical: 18,
+            gap: 10,
+        },
+        submit_text: {
+            fontFamily: 'WorkSans-SemiBold',
+            fontSize: 17,
+            color: 'white',
+        },
+        toggle: {
+            marginTop: 20,
+            alignItems: 'center',
+            justifyContent: 'center',
+            paddingVertical: 13,
+            borderRadius: 14,
+            borderWidth: 1,
+            borderColor: theme.accent_border,
+            backgroundColor: theme.accent_soft,
+        },
+        toggle_text: {
+            fontFamily: 'WorkSans-SemiBold',
+            fontSize: 15,
+            color: theme.accent,
+        },
+        skip: {
+            marginTop: 14,
+            alignItems: 'center',
+        },
+        skip_text: {
+            fontFamily: 'WorkSans-Regular',
+            fontSize: 13,
+            color: theme.text_tertiary,
+        },
+    });

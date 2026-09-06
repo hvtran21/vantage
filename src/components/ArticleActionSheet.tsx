@@ -42,7 +42,7 @@ import { useAuth } from '@clerk/expo';
 import Article from '@/lib/constants';
 import { domainForArticle } from '@/lib/domain';
 import { blockSource, reportSource } from '@/lib/sources';
-import { theme, getTopicColor } from '@/components/styles';
+import { getTopicColor, useTheme, type Theme } from '@/components/Theme';
 import { useMotion } from '@/components/Motion';
 import { scaleMs, scaleSpring } from '@/lib/motion';
 
@@ -81,6 +81,8 @@ interface ActionRowProps {
 }
 
 function ActionRow({ icon, label, onPress, tone = 'default' }: ActionRowProps) {
+    const theme = useTheme();
+    const styles = useMemo(() => makeStyles(theme), [theme]);
     const color = tone === 'danger' ? theme.danger : tone === 'active' ? theme.accent : theme.text;
     return (
         <TouchableOpacity style={styles.row} onPress={onPress} activeOpacity={0.6}>
@@ -107,6 +109,8 @@ export function ActionSheetProvider({ children }: { children: ReactNode }) {
     const insets = useSafeAreaInsets();
     const { scale } = useMotion();
     const { isSignedIn, getToken } = useAuth();
+    const theme = useTheme();
+    const styles = useMemo(() => makeStyles(theme), [theme]);
 
     const translateY = useSharedValue(SCREEN_HEIGHT);
     const sheetHeight = useSharedValue(SCREEN_HEIGHT);
@@ -194,7 +198,7 @@ export function ActionSheetProvider({ children }: { children: ReactNode }) {
 
     const article = request?.article;
     const label = article?.genre || article?.category || 'Top';
-    const topicColor = getTopicColor(label);
+    const topicColor = getTopicColor(label, theme);
     // Naming the publisher makes it obvious the action is about the source, not
     // this one article.
     const domain = article ? domainForArticle(article) : null;
@@ -335,97 +339,98 @@ export function ActionSheetProvider({ children }: { children: ReactNode }) {
     );
 }
 
-const styles = StyleSheet.create({
-    root: {
-        flex: 1,
-    },
-    overlay: {
-        ...StyleSheet.absoluteFillObject,
-        justifyContent: 'flex-end',
-    },
-    scrim: {
-        backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    },
-    sheet: {
-        backgroundColor: theme.elevated,
-        borderTopLeftRadius: 28,
-        borderTopRightRadius: 28,
-        paddingTop: 10,
-    },
-    // Widens the grab target around the 4pt handle.
-    handle_hitbox: {
-        alignItems: 'center',
-        paddingVertical: 6,
-        paddingBottom: 14,
-    },
-    handle: {
-        width: 36,
-        height: 4,
-        borderRadius: 2,
-        backgroundColor: 'rgba(255, 255, 255, 0.16)',
-    },
-    header: {
-        flexDirection: 'row',
-        alignItems: 'flex-start',
-        gap: 12,
-        paddingHorizontal: 20,
-        paddingBottom: 16,
-    },
-    header_accent: {
-        width: 3,
-        height: 32,
-        borderRadius: 2,
-        marginTop: 2,
-    },
-    header_text_block: {
-        flex: 1,
-    },
-    header_label: {
-        fontFamily: 'WorkSans-SemiBold',
-        fontSize: 11,
-        letterSpacing: 1,
-        textTransform: 'uppercase',
-        marginBottom: 3,
-    },
-    header_title: {
-        fontFamily: 'WorkSans-SemiBold',
-        fontSize: 15,
-        lineHeight: 20,
-        color: theme.text,
-    },
-    divider: {
-        height: StyleSheet.hairlineWidth,
-        backgroundColor: theme.border,
-    },
-    group: {
-        paddingVertical: 6,
-        paddingHorizontal: 12,
-    },
-    row: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 14,
-        paddingVertical: 10,
-        paddingHorizontal: 8,
-    },
-    icon_chip: {
-        width: 32,
-        height: 32,
-        borderRadius: 10,
-        backgroundColor: theme.surface,
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    icon_chip_active: {
-        backgroundColor: theme.accent_soft,
-    },
-    icon_chip_danger: {
-        backgroundColor: 'rgba(239, 68, 68, 0.10)',
-    },
-    row_label: {
-        fontFamily: 'WorkSans-Regular',
-        fontSize: 16,
-    },
-});
+const makeStyles = (theme: Theme) =>
+    StyleSheet.create({
+        root: {
+            flex: 1,
+        },
+        overlay: {
+            ...StyleSheet.absoluteFillObject,
+            justifyContent: 'flex-end',
+        },
+        scrim: {
+            backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        },
+        sheet: {
+            backgroundColor: theme.elevated,
+            borderTopLeftRadius: 28,
+            borderTopRightRadius: 28,
+            paddingTop: 10,
+        },
+        // Widens the grab target around the 4pt handle.
+        handle_hitbox: {
+            alignItems: 'center',
+            paddingVertical: 6,
+            paddingBottom: 14,
+        },
+        handle: {
+            width: 36,
+            height: 4,
+            borderRadius: 2,
+            backgroundColor: 'rgba(255, 255, 255, 0.16)',
+        },
+        header: {
+            flexDirection: 'row',
+            alignItems: 'flex-start',
+            gap: 12,
+            paddingHorizontal: 20,
+            paddingBottom: 16,
+        },
+        header_accent: {
+            width: 3,
+            height: 32,
+            borderRadius: 2,
+            marginTop: 2,
+        },
+        header_text_block: {
+            flex: 1,
+        },
+        header_label: {
+            fontFamily: 'WorkSans-SemiBold',
+            fontSize: 11,
+            letterSpacing: 1,
+            textTransform: 'uppercase',
+            marginBottom: 3,
+        },
+        header_title: {
+            fontFamily: 'WorkSans-SemiBold',
+            fontSize: 15,
+            lineHeight: 20,
+            color: theme.text,
+        },
+        divider: {
+            height: StyleSheet.hairlineWidth,
+            backgroundColor: theme.border,
+        },
+        group: {
+            paddingVertical: 6,
+            paddingHorizontal: 12,
+        },
+        row: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 14,
+            paddingVertical: 10,
+            paddingHorizontal: 8,
+        },
+        icon_chip: {
+            width: 32,
+            height: 32,
+            borderRadius: 10,
+            backgroundColor: theme.surface,
+            justifyContent: 'center',
+            alignItems: 'center',
+        },
+        icon_chip_active: {
+            backgroundColor: theme.accent_soft,
+        },
+        icon_chip_danger: {
+            backgroundColor: 'rgba(239, 68, 68, 0.10)',
+        },
+        row_label: {
+            fontFamily: 'WorkSans-Regular',
+            fontSize: 16,
+        },
+    });
 
 export default ActionSheetProvider;
