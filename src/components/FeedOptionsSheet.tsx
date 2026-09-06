@@ -131,7 +131,9 @@ export function FeedOptionsProvider({ children }: { children: ReactNode }) {
     const close = useCallback(() => {
         if (closing.current) return;
         closing.current = true;
-        progress.value = withTiming(0, { duration: scaleMs(scale, 150) }, (finished) => {
+        // Long enough to actually read as a fade rather than a snap, same
+        // tuning as ArticleActionSheet's close.
+        progress.value = withTiming(0, { duration: scaleMs(scale, 200) }, (finished) => {
             if (finished) runOnJS(clear)();
         });
     }, [clear, progress, scale]);

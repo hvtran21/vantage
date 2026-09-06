@@ -168,7 +168,10 @@ export function ActionSheetProvider({ children }: { children: ReactNode }) {
     const close = useCallback(() => {
         if (closing.current) return;
         closing.current = true;
-        progress.value = withTiming(0, { duration: scaleMs(scale, 120) }, (finished) => {
+        // 120ms (or 60ms at "Snappy") was technically animating but too fast to
+        // read as a fade rather than a snap -- this is long enough to actually
+        // see, short enough to still feel responsive.
+        progress.value = withTiming(0, { duration: scaleMs(scale, 200) }, (finished) => {
             if (finished) runOnJS(clear)();
         });
     }, [clear, progress, scale]);
