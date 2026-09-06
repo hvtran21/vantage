@@ -7,7 +7,7 @@ import { faUser, faCheck, faSignOutAlt, faSignInAlt } from '@fortawesome/free-so
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useUser, useAuth } from '@clerk/expo';
 import { TabHeader, HeaderRule } from '@/components/styles';
-import { topicColors, useTheme, type Theme } from '@/components/Theme';
+import { getTopicColor, useTheme, type Theme } from '@/components/Theme';
 import {
     listBlocked,
     listReportedDomains,
@@ -92,7 +92,7 @@ function GenrePreferences() {
                     ? null
                     : genreOptions.map((genre, index) => {
                           const active = selected.includes(genre);
-                          const tc = topicColors[genre];
+                          const tc = getTopicColor(genre, theme);
                           return (
                               <TouchableOpacity
                                   key={genre}

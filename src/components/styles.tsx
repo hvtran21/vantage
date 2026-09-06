@@ -106,17 +106,4 @@ const makeHeaderStyles = (theme: Theme) =>
         },
     });
 
-export const HorizonalLine = () => {
-    const theme = useTheme();
-    return (
-        <View
-            style={{
-                height: StyleSheet.hairlineWidth,
-                backgroundColor: theme.border,
-                marginHorizontal: 20,
-            }}
-        />
-    );
-};
-
 export default GradientText;

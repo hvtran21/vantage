@@ -107,6 +107,13 @@ export async function updateArticleQueryTime() {
     }
 }
 
+/** The last successful sync time, for display (e.g. "Last updated 4 minutes ago"). */
+export async function getLastQueryTime(): Promise<string | null> {
+    const db = await getDb();
+    const row = (await db.getFirstAsync('SELECT * FROM metadata')) as MetadataRow | null;
+    return row?.latest_article_query ?? null;
+}
+
 export async function canRefreshArticles() {
     const cooldownMinutes = 0.5;
     const db = await getDb();

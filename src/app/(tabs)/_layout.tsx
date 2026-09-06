@@ -60,15 +60,14 @@ function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
                 {BLURRED && (
                     <BlurView
                         intensity={65}
-                        tint="dark"
+                        tint={theme.dark ? 'dark' : 'light'}
                         experimentalBlurMethod={ANDROID_BLUR ? 'dimezisBlurView' : undefined}
                         style={StyleSheet.absoluteFill}
                     />
                 )}
 
                 <LinearGradient
-                    colors={['rgba(255,255,255,0.08)', 'rgba(255,255,255,0.02)', 'transparent']}
-                    locations={[0, 0.45, 1]}
+                    colors={[theme.tab_glint, 'transparent']}
                     pointerEvents="none"
                     style={StyleSheet.absoluteFill}
                 />
@@ -188,7 +187,7 @@ const makeTabStyles = (theme: Theme) =>
             borderRadius: 26,
             shadowColor: '#000',
             shadowOffset: { width: 0, height: 8 },
-            shadowOpacity: 0.45,
+            shadowOpacity: theme.tab_shadow_opacity,
             shadowRadius: 18,
             elevation: 14,
         },
@@ -199,16 +198,13 @@ const makeTabStyles = (theme: Theme) =>
             borderRadius: 26,
             overflow: 'hidden',
             borderWidth: StyleSheet.hairlineWidth,
-            borderColor: Platform.select({
-                ios: 'rgba(255,255,255,0.14)',
-                default: 'rgba(255,255,255,0.20)',
-            }),
+            borderColor: theme.tab_border,
             // Translucent only where a real blur backs it.
             backgroundColor:
                 Platform.OS === 'ios'
                     ? 'transparent'
                     : ANDROID_BLUR
-                      ? 'rgba(14, 14, 14, 0.45)'
+                      ? theme.tab_bg
                       : theme.elevated,
         },
         indicator: {

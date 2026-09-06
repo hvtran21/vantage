@@ -19,14 +19,17 @@ import {
     faUpRightFromSquare,
     faBookmark as faBookmarkSolid,
     faXmark,
+    faCheck,
 } from '@fortawesome/free-solid-svg-icons';
 import { faBookmark as faBookmarkOutline } from '@fortawesome/free-regular-svg-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import Article from '@/lib/constants';
 import { getDb } from '@/lib/database';
 import { formatDate } from '@/components/NewsCard';
-import { getTopicColor, useTheme, type Theme } from '@/components/Theme';
+import { getTopicColor, hexToRgba, useTheme, type Theme } from '@/components/Theme';
 import { stripHtml } from '@/lib/utilities';
+import { domainForArticle } from '@/lib/domain';
+import { getPublisherLabel } from '@/lib/publishers';
 import { useMotion } from '@/components/Motion';
 import { scaleMs, withMotion } from '@/lib/motion';
 import Animated, { FadeIn, FadeInDown, FadeInUp } from 'react-native-reanimated';
@@ -117,6 +120,8 @@ export default function ArticleDetail() {
     const date = formatDate(new Date(article.published_at));
     const label = article.genre || article.category || 'Top';
     const topicColor = getTopicColor(label, theme);
+    const publisher = getPublisherLabel(domainForArticle(article));
+    const sourceLabel = publisher?.name ?? article.source;
 
     return (
         <SafeAreaProvider>
@@ -138,7 +143,7 @@ export default function ArticleDetail() {
                             transition={300}
                         />
                         <LinearGradient
-                            colors={['transparent', 'rgba(5, 5, 5, 0.6)', theme.bg]}
+                            colors={['transparent', hexToRgba(theme.bg, 0.6), theme.bg]}
                             locations={[0.2, 0.6, 1]}
                             style={styles.hero_gradient}
                         />
@@ -157,10 +162,17 @@ export default function ArticleDetail() {
                         </View>
                         <Text style={styles.meta_dot}> </Text>
                         <Text style={styles.meta_date}>{date}</Text>
-                        {article.source && (
+                        {sourceLabel && (
                             <>
                                 <Text style={styles.meta_dot}> </Text>
-                                <Text style={styles.source_text}>{article.source}</Text>
+                                <Text style={styles.source_text}>{sourceLabel}</Text>
+                                {publisher?.known && (
+                                    <FontAwesomeIcon
+                                        icon={faCheck}
+                                        size={10}
+                                        color={theme.accent}
+                                    />
+                                )}
                             </>
                         )}
                     </Animated.View>

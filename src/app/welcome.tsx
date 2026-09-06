@@ -8,7 +8,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import Animated, { FadeIn, FadeInDown, FadeInUp } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
 import { initializeDatabase } from '@/lib/database';
-import { topicColors, useTheme, type Theme } from '@/components/Theme';
+import { getTopicColor, useTheme, type Theme } from '@/components/Theme';
 import { useMotion } from '@/components/Motion';
 import { scaleMs, withMotion } from '@/lib/motion';
 
@@ -100,7 +100,7 @@ export default function WelcomePage() {
                     >
                         {genre_arr.map((item, index) => {
                             const isSelected = userGenreSelection.includes(item);
-                            const tc = topicColors[item];
+                            const tc = getTopicColor(item, theme);
                             return (
                                 <TouchableOpacity
                                     key={index}

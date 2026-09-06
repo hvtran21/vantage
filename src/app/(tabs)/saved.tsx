@@ -9,7 +9,7 @@ import { useActionSheet } from '@/components/ArticleActionSheet';
 import { getDb } from '@/lib/database';
 import { getSavedArticles } from '@/lib/services';
 import { NewsCard } from '@/components/NewsCard';
-import { TabHeader, HeaderRule, HorizonalLine, TAB_BAR_INSET } from '@/components/styles';
+import { TabHeader, HeaderRule, TAB_BAR_INSET } from '@/components/styles';
 import { useTheme, type Theme } from '@/components/Theme';
 import { useMotion } from '@/components/Motion';
 import { scaleMs, withMotion } from '@/lib/motion';
@@ -104,7 +104,6 @@ export default function SavedScreen() {
                             : { flexGrow: 1, paddingBottom: TAB_BAR_INSET }
                     }
                     ListEmptyComponent={<EmptyState />}
-                    ItemSeparatorComponent={() => <HorizonalLine />}
                     renderItem={({ item }) => (
                         <NewsCard
                             title={item.title}
@@ -112,6 +111,9 @@ export default function SavedScreen() {
                             published_at={item.published_at}
                             genre={item.genre ?? ''}
                             id={item.id}
+                            source={item.source}
+                            source_domain={item.source_domain}
+                            url={item.url}
                             handleEllipsisPress={handleEllipsisPress}
                         />
                     )}
