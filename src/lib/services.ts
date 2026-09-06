@@ -139,16 +139,92 @@ export async function getAllArticles(
     return (results as Article[]) ?? [];
 }
 
-export async function searchArticles(query: string): Promise<Article[]> {
+// Matches the API's own `limit` default/cap for /api/articles/search, and
+// doubles as the "thin" threshold below: fewer local rows than a full page
+// means the ~200-row cache likely doesn't hold every match.
+const SEARCH_LIMIT = 50;
+
+async function queryLocalArticles(query: string): Promise<Article[]> {
     const db = await getDb();
     const searchTerm = `%${query}%`;
     const results = await db.getAllAsync(
         // The OR needs its own parentheses, or the block filter would only apply
         // to the description half.
-        `SELECT * FROM articles WHERE (title LIKE ? OR description LIKE ?) AND ${NOT_BLOCKED} LIMIT 50`,
-        [searchTerm, searchTerm],
+        `SELECT * FROM articles WHERE (title LIKE ? OR description LIKE ?) AND ${NOT_BLOCKED} LIMIT ?`,
+        [searchTerm, searchTerm, SEARCH_LIMIT],
     );
     return (results as Article[]) ?? [];
+}
+
+export async function searchArticles(query: string, token?: string): Promise<Article[]> {
+    const local = await queryLocalArticles(query);
+    if (local.length >= SEARCH_LIMIT) return local;
+
+    // The client only ever caches a few hundred articles, so a thin local hit
+    // doesn't mean the term has no matches -- it means they're likely outside
+    // the cache. /api/articles/search runs the same match against the full
+    // server-side table.
+    const outcome = await searchArticlesRemote(query, token);
+    return outcome ? queryLocalArticles(query) : local;
+}
+
+async function searchArticlesRemote(query: string, token?: string) {
+    try {
+        const params = new URLSearchParams({ q: query, limit: String(SEARCH_LIMIT) });
+        const url = `${BASE_URL}/api/articles/search?${params}`;
+
+        const response = await fetch(url, {
+            method: 'GET',
+            headers: {
+                Accept: 'application/json',
+                ...(await principalHeaders(token)),
+            },
+        });
+
+        if (!response.ok) {
+            console.error(`[api] Search request failed with status ${response.status}`);
+            return;
+        }
+
+        const data = await response.json();
+        const insertedCount = await cacheArticles(data.articles as Article[]);
+        return { insertedCount };
+    } catch (error) {
+        console.error('[api] searchArticlesRemote failed:', error);
+    }
+}
+
+async function cacheArticles(articles: Article[]): Promise<number> {
+    const db = await getDb();
+    const statement = await db.prepareAsync(
+        'INSERT OR IGNORE INTO articles(id, genre, category, source, author, title, description, url, url_to_image, published_at, content, saved, source_domain) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    );
+
+    let insertedCount = 0;
+    try {
+        for (const article of articles) {
+            const result = await statement.executeAsync([
+                article.id,
+                article.genre ?? null,
+                article.category ?? null,
+                article.source ?? null,
+                article.author ?? null,
+                article.title ?? null,
+                article.description ?? null,
+                article.url?.toString() ?? null,
+                article.url_to_image?.toString() ?? null,
+                article.published_at ?? null,
+                article.content ?? null,
+                0,
+                // The API sends this; fall back for anything older.
+                article.source_domain ?? extractDomain(article.url) ?? null,
+            ]);
+            if (result.changes > 0) insertedCount++;
+        }
+    } finally {
+        await statement.finalizeAsync();
+    }
+    return insertedCount;
 }
 
 export async function fetchAndCacheArticles(
@@ -187,38 +263,8 @@ export async function fetchAndCacheArticles(
         }
 
         const data = await response.json();
-        const articles = data.articles as Article[];
         const nextCursor = (data.nextCursor as string | null | undefined) ?? null;
-
-        const db = await getDb();
-        const statement = await db.prepareAsync(
-            'INSERT OR IGNORE INTO articles(id, genre, category, source, author, title, description, url, url_to_image, published_at, content, saved, source_domain) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-        );
-
-        let insertedCount = 0;
-        try {
-            for (const article of articles) {
-                const result = await statement.executeAsync([
-                    article.id,
-                    article.genre ?? null,
-                    article.category ?? null,
-                    article.source ?? null,
-                    article.author ?? null,
-                    article.title ?? null,
-                    article.description ?? null,
-                    article.url?.toString() ?? null,
-                    article.url_to_image?.toString() ?? null,
-                    article.published_at ?? null,
-                    article.content ?? null,
-                    0,
-                    // The API sends this; fall back for anything older.
-                    article.source_domain ?? extractDomain(article.url) ?? null,
-                ]);
-                if (result.changes > 0) insertedCount++;
-            }
-        } finally {
-            await statement.finalizeAsync();
-        }
+        const insertedCount = await cacheArticles(data.articles as Article[]);
 
         return { insertedCount, nextCursor };
     } catch (error) {

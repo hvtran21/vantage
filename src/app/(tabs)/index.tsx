@@ -388,10 +388,11 @@ export default function HomeFeed() {
                 if (preSearchArticles.current.length > 0) setArticles(preSearchArticles.current);
                 return;
             }
-            const results = await searchArticles(text.trim());
+            const token = (await getToken()) ?? undefined;
+            const results = await searchArticles(text.trim(), token);
             setArticles(results);
         }, 300);
-    }, []);
+    }, [getToken]);
 
     const handleSearchOpen = useCallback(() => {
         preSearchArticles.current = articles;
