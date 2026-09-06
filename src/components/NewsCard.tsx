@@ -383,9 +383,15 @@ const makeCardStyle = (theme: Theme) =>
             fontSize: 12,
             color: theme.text_tertiary,
         },
+        // alignItems: 'center' on `row` centers this against the text column,
+        // which for a short (1-line) title used to push it up under the
+        // ellipsis -- pinned to the top instead, with enough clearance to
+        // always sit below it, regardless of how many lines the title takes.
         thumbnail_frame: {
             width: 96,
             height: 96,
+            alignSelf: 'flex-start',
+            marginTop: 20,
         },
         thumbnail_image: {
             width: '100%',
