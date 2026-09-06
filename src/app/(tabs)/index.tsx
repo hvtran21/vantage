@@ -15,7 +15,7 @@ import {
 import { SafeAreaView, SafeAreaProvider } from 'react-native-safe-area-context';
 import { useFocusEffect, router } from 'expo-router';
 import { useAuth } from '@clerk/expo';
-import { useActionSheet } from '@/components/ArticleActionSheet';
+import { useActionSheet, type AnchorRect } from '@/components/ArticleActionSheet';
 import { getDb } from '@/lib/database';
 import { saveArticle, unsaveArticle } from '@/lib/savedArticles';
 import { NewsCard } from '@/components/NewsCard';
@@ -232,7 +232,7 @@ export default function HomeFeed() {
     }, [loadingMore, hasMore, searchOpen, cursor, filter, loadByFilter, networkCursors, getToken]);
 
     const handleEllipsisPress = useCallback(
-        (id: string) => {
+        (id: string, anchor: AnchorRect) => {
             // The row is already in state from rendering the card, so the sheet
             // can open on this tick rather than after a SQLite round trip.
             const article = articles.find((item) => item.id === id);
@@ -240,6 +240,7 @@ export default function HomeFeed() {
             actionSheet.open({
                 article,
                 saved: article.saved === 1,
+                anchor,
                 onToggleSave: async (next) => {
                     const token = (await getToken()) ?? undefined;
                     if (next) {

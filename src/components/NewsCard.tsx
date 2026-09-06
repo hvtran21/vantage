@@ -2,7 +2,7 @@ import { Text, View, StyleSheet, TouchableOpacity } from 'react-native';
 import { Image } from 'expo-image';
 import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
 import { faEllipsisVertical, faCheck } from '@fortawesome/free-solid-svg-icons';
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ElementRef, type ReactNode } from 'react';
 import { router } from 'expo-router';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import { getTopicColor, useTheme, type Theme } from '@/components/Theme';
@@ -10,6 +10,7 @@ import { useMotion } from '@/components/Motion';
 import { scaleMs, withMotion } from '@/lib/motion';
 import { domainForArticle } from '@/lib/domain';
 import { getPublisherLabel } from '@/lib/publishers';
+import type { AnchorRect } from '@/components/ArticleActionSheet';
 
 function formatDate(date: Date): string {
     if (!(date instanceof Date) || isNaN(date.getTime())) {
@@ -77,7 +78,7 @@ interface CardFrontProps {
     published_at: string;
     genre: string;
     id: string;
-    handleEllipsisPress: (id: string) => void;
+    handleEllipsisPress: (id: string, anchor: AnchorRect) => void;
     source?: string | null;
     source_domain?: string | null;
     url?: string | null;
@@ -152,11 +153,22 @@ function EllipsisButton({
     theme: Theme;
     style?: object;
     size?: number;
-    onPress: () => void;
+    onPress: (anchor: AnchorRect) => void;
 }) {
+    const ref = useRef<ElementRef<typeof TouchableOpacity>>(null);
+
+    const handlePress = () => {
+        // The menu anchors to wherever this button actually is on screen, not a
+        // fixed spot, so it has to ask the native view for its own position.
+        ref.current?.measureInWindow((x: number, y: number, width: number, height: number) => {
+            onPress({ x, y, width, height });
+        });
+    };
+
     return (
         <TouchableOpacity
-            onPress={onPress}
+            ref={ref}
+            onPress={handlePress}
             hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
             style={style}
         >
@@ -225,7 +237,7 @@ export const NewsCard = ({
                                 <EllipsisButton
                                     theme={theme}
                                     style={styles.ellipsis_btn}
-                                    onPress={() => handleEllipsisPress(id)}
+                                    onPress={(anchor) => handleEllipsisPress(id, anchor)}
                                 />
                             }
                         />
@@ -284,7 +296,7 @@ export const NewsCard = ({
             <EllipsisButton
                 theme={theme}
                 style={styles.row_ellipsis_btn}
-                onPress={() => handleEllipsisPress(id)}
+                onPress={(anchor) => handleEllipsisPress(id, anchor)}
             />
         </Animated.View>
     );

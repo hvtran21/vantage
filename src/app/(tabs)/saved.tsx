@@ -6,7 +6,7 @@ import { useAuth } from '@clerk/expo';
 import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
 import { faBookmark } from '@fortawesome/free-solid-svg-icons';
 import Article from '@/lib/constants';
-import { useActionSheet } from '@/components/ArticleActionSheet';
+import { useActionSheet, type AnchorRect } from '@/components/ArticleActionSheet';
 import { getSavedArticles } from '@/lib/services';
 import { syncSavedArticles, unsaveArticle } from '@/lib/savedArticles';
 import { NewsCard } from '@/components/NewsCard';
@@ -49,7 +49,7 @@ export default function SavedScreen() {
     );
 
     const handleEllipsisPress = useCallback(
-        (id: string) => {
+        (id: string, anchor: AnchorRect) => {
             // Already in state from rendering the row, so the sheet opens on this
             // tick. Everything in this list is saved by definition.
             const article = savedArticles.find((item) => item.id === id);
@@ -57,6 +57,7 @@ export default function SavedScreen() {
             actionSheet.open({
                 article,
                 saved: true,
+                anchor,
                 onToggleSave: async () => {
                     const token = (await getToken()) ?? undefined;
                     await unsaveArticle(article.id, token);

@@ -18,7 +18,6 @@ import {
     Dimensions,
     type LayoutChangeEvent,
 } from 'react-native';
-import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
     Extrapolation,
     interpolate,
@@ -46,14 +45,19 @@ import { getTopicColor, useTheme, type Theme } from '@/components/Theme';
 import { useMotion } from '@/components/Motion';
 import { scaleMs, scaleSpring } from '@/lib/motion';
 
-const DISMISS_DISTANCE = 90;
-const DISMISS_VELOCITY = 800;
-const RISE = { damping: 24, stiffness: 240, mass: 0.7 };
-const SCREEN_HEIGHT = Dimensions.get('window').height;
+const POPOVER_WIDTH = 232;
+const GAP = 8;
+const MARGIN = 12;
+const POP = { damping: 20, stiffness: 300, mass: 0.5 };
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+
+/** Where the ellipsis that opened the menu actually sits, from measureInWindow. */
+export type AnchorRect = { x: number; y: number; width: number; height: number };
 
 export type ActionSheetRequest = {
     article: Article;
     saved: boolean;
+    anchor: AnchorRect;
     onToggleSave: (next: boolean) => void;
     onOpenInBrowser: () => void;
     /** Lets the calling list drop the publisher's rows without a reload. */
@@ -93,55 +97,85 @@ function ActionRow({ icon, label, onPress, tone = 'default' }: ActionRowProps) {
                     tone === 'danger' && styles.icon_chip_danger,
                 ]}
             >
-                <FontAwesomeIcon icon={icon} size={15} color={color} />
+                <FontAwesomeIcon icon={icon} size={14} color={color} />
             </View>
             <Text style={[styles.row_label, { color }]}>{label}</Text>
         </TouchableOpacity>
     );
 }
 
+type Position = { top: number; left: number };
+
+// The floating tab bar (app/(tabs)/_layout.tsx) sits at `bottom: insets.bottom
+// + 16` and is 72 tall -- a menu opening downward near the last visible card
+// needs to clear that too, not just the safe-area inset.
+const TAB_BAR_ZONE = 16 + 72;
+
+/**
+ * Right-aligns to the ellipsis by default (it sits at a card's top-right or in
+ * a header row) and flips to open upward when there isn't room below -- a card
+ * near the bottom of the feed would otherwise push the menu under the tab bar.
+ */
+function computePosition(
+    anchor: AnchorRect,
+    menuHeight: number,
+    insets: { top: number; bottom: number },
+): Position {
+    let left = anchor.x + anchor.width - POPOVER_WIDTH;
+    left = Math.min(Math.max(left, MARGIN), SCREEN_WIDTH - POPOVER_WIDTH - MARGIN);
+
+    const bottomObstruction = insets.bottom + TAB_BAR_ZONE + MARGIN;
+    const spaceBelow = SCREEN_HEIGHT - bottomObstruction - (anchor.y + anchor.height + GAP);
+    const opensUpward = spaceBelow < menuHeight;
+    const top = opensUpward ? anchor.y - GAP - menuHeight : anchor.y + anchor.height + GAP;
+
+    return { top: Math.max(top, insets.top + MARGIN), left };
+}
+
 // Hosted at the root rather than in a react-native Modal: Modal builds a native
 // Dialog window on Android, which measured ~470ms from tap to visible no matter
 // what animationType was set to.
+//
+// Anchored to the ellipsis that opened it (a small popover that pops in near the
+// tap point) rather than a full-screen sheet rising from the bottom -- the
+// distance a bottom sheet travels reads as a much bigger event than "show me
+// three actions for this one article."
 export function ActionSheetProvider({ children }: { children: ReactNode }) {
     const [request, setRequest] = useState<ActionSheetRequest | null>(null);
     const [saved, setSaved] = useState(false);
+    const [position, setPosition] = useState<Position | null>(null);
     const insets = useSafeAreaInsets();
     const { scale } = useMotion();
     const { isSignedIn, getToken } = useAuth();
     const theme = useTheme();
     const styles = useMemo(() => makeStyles(theme), [theme]);
 
-    const translateY = useSharedValue(SCREEN_HEIGHT);
-    const sheetHeight = useSharedValue(SCREEN_HEIGHT);
+    const progress = useSharedValue(0);
     const closing = useRef(false);
 
     const clear = useCallback(() => {
         closing.current = false;
         setRequest(null);
+        setPosition(null);
     }, []);
 
     const close = useCallback(() => {
         if (closing.current) return;
         closing.current = true;
-        translateY.value = withTiming(
-            sheetHeight.value,
-            { duration: scaleMs(scale, 180) },
-            (finished) => {
-                if (finished) runOnJS(clear)();
-            },
-        );
-    }, [clear, sheetHeight, translateY, scale]);
+        progress.value = withTiming(0, { duration: scaleMs(scale, 120) }, (finished) => {
+            if (finished) runOnJS(clear)();
+        });
+    }, [clear, progress, scale]);
 
     const open = useCallback(
         (next: ActionSheetRequest) => {
             closing.current = false;
             setSaved(next.saved);
             setRequest(next);
-            translateY.value = SCREEN_HEIGHT;
-            translateY.value = scale === 0 ? 0 : withSpring(0, scaleSpring(scale, RISE));
+            setPosition(null);
+            progress.value = 0;
         },
-        [translateY, scale],
+        [progress],
     );
 
     const api = useMemo<ActionSheetApi>(() => ({ open, close }), [open, close]);
@@ -156,49 +190,23 @@ export function ActionSheetProvider({ children }: { children: ReactNode }) {
         return () => sub.remove();
     }, [request, close]);
 
-    const pan = useMemo(
-        () =>
-            Gesture.Pan()
-                // Only claim clear vertical drags, so taps on the rows still land.
-                .activeOffsetY(8)
-                // ...and let a mostly-horizontal swipe go rather than dragging the sheet.
-                .failOffsetX([-20, 20])
-                .onUpdate((event) => {
-                    translateY.value = Math.max(0, event.translationY);
-                })
-                .onEnd((event) => {
-                    if (
-                        event.translationY > DISMISS_DISTANCE ||
-                        event.velocityY > DISMISS_VELOCITY
-                    ) {
-                        runOnJS(close)();
-                    } else if (scale === 0) {
-                        translateY.value = 0;
-                    } else {
-                        translateY.value = withSpring(
-                            0,
-                            scaleSpring(scale, { damping: 22, stiffness: 260 }),
-                        );
-                    }
-                }),
-        [close, translateY, scale],
+    // Fires once the invisible measuring pass below reports the menu's real
+    // height, which is what decides whether it opens above or below the anchor.
+    const onMeasured = useCallback(
+        (event: LayoutChangeEvent) => {
+            if (!request) return;
+            setPosition(computePosition(request.anchor, event.nativeEvent.layout.height, insets));
+            progress.value = scale === 0 ? 1 : withSpring(1, scaleSpring(scale, POP));
+        },
+        [request, insets, scale, progress],
     );
 
-    const sheetStyle = useAnimatedStyle(() => ({
-        transform: [{ translateY: translateY.value }],
+    const animatedStyle = useAnimatedStyle(() => ({
+        opacity: progress.value,
+        transform: [{ scale: interpolate(progress.value, [0, 1], [0.92, 1], Extrapolation.CLAMP) }],
     }));
-
-    const scrimStyle = useAnimatedStyle(() => ({
-        opacity: interpolate(translateY.value, [0, sheetHeight.value], [1, 0], Extrapolation.CLAMP),
-    }));
-
-    const onSheetLayout = (event: LayoutChangeEvent) => {
-        sheetHeight.value = event.nativeEvent.layout.height;
-    };
 
     const article = request?.article;
-    const label = article?.genre || article?.category || 'Top';
-    const topicColor = getTopicColor(label, theme);
     // Naming the publisher makes it obvious the action is about the source, not
     // this one article.
     const domain = article ? domainForArticle(article) : null;
@@ -230,108 +238,88 @@ export function ActionSheetProvider({ children }: { children: ReactNode }) {
         [request, getToken, article],
     );
 
+    const menuBody = request && (
+        <>
+            <View style={styles.group}>
+                <ActionRow
+                    icon={saved ? faBookmarkSolid : faBookmarkOutline}
+                    label={saved ? 'Unsave' : 'Save'}
+                    tone={saved ? 'active' : 'default'}
+                    onPress={() => {
+                        const next = !saved;
+                        setSaved(next);
+                        request.onToggleSave(next);
+                        close();
+                    }}
+                />
+                <ActionRow
+                    icon={faUpRightFromSquare}
+                    label="Open in browser"
+                    onPress={() => {
+                        request.onOpenInBrowser();
+                        close();
+                    }}
+                />
+                {domain && (
+                    <ActionRow
+                        icon={faBan}
+                        label={`Block ${domain}`}
+                        onPress={() => {
+                            handleBlock(domain);
+                            close();
+                        }}
+                    />
+                )}
+            </View>
+
+            {domain && isSignedIn && (
+                <>
+                    <View style={styles.divider} />
+                    <View style={styles.group}>
+                        <ActionRow
+                            icon={faFlag}
+                            label={`Report ${domain}`}
+                            tone="danger"
+                            onPress={() => {
+                                handleReport(domain);
+                                close();
+                            }}
+                        />
+                    </View>
+                </>
+            )}
+        </>
+    );
+
     return (
         <ActionSheetContext.Provider value={api}>
             <View style={styles.root}>
                 {children}
 
-                {request && (
-                    <View style={styles.overlay} pointerEvents="box-none">
-                        <Animated.View
-                            style={[StyleSheet.absoluteFill, styles.scrim, scrimStyle]}
-                            pointerEvents="none"
-                        />
+                {request && !position && (
+                    // Invisible: only here to learn the menu's real height before
+                    // computing where it should sit and animating it in.
+                    <View
+                        style={[styles.popover, styles.measuring, { width: POPOVER_WIDTH }]}
+                        onLayout={onMeasured}
+                        pointerEvents="none"
+                    >
+                        {menuBody}
+                    </View>
+                )}
+
+                {request && position && (
+                    <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
                         <Pressable style={StyleSheet.absoluteFill} onPress={close} />
-
-                        <GestureDetector gesture={pan}>
-                            <Animated.View
-                                style={[
-                                    styles.sheet,
-                                    { paddingBottom: insets.bottom + 12 },
-                                    sheetStyle,
-                                ]}
-                                onLayout={onSheetLayout}
-                            >
-                                <View style={styles.handle_hitbox}>
-                                    <View style={styles.handle} />
-                                </View>
-
-                                {article && (
-                                    <View style={styles.header}>
-                                        <View
-                                            style={[
-                                                styles.header_accent,
-                                                { backgroundColor: topicColor.color },
-                                            ]}
-                                        />
-                                        <View style={styles.header_text_block}>
-                                            <Text
-                                                style={[
-                                                    styles.header_label,
-                                                    { color: topicColor.color },
-                                                ]}
-                                            >
-                                                {label}
-                                            </Text>
-                                            <Text style={styles.header_title} numberOfLines={2}>
-                                                {article.title}
-                                            </Text>
-                                        </View>
-                                    </View>
-                                )}
-
-                                <View style={styles.divider} />
-
-                                <View style={styles.group}>
-                                    <ActionRow
-                                        icon={saved ? faBookmarkSolid : faBookmarkOutline}
-                                        label={saved ? 'Unsave' : 'Save'}
-                                        tone={saved ? 'active' : 'default'}
-                                        onPress={() => {
-                                            const next = !saved;
-                                            setSaved(next);
-                                            request.onToggleSave(next);
-                                            close();
-                                        }}
-                                    />
-                                    <ActionRow
-                                        icon={faUpRightFromSquare}
-                                        label="Open in browser"
-                                        onPress={() => {
-                                            request.onOpenInBrowser();
-                                            close();
-                                        }}
-                                    />
-                                    {domain && (
-                                        <ActionRow
-                                            icon={faBan}
-                                            label={`Block ${domain}`}
-                                            onPress={() => {
-                                                handleBlock(domain);
-                                                close();
-                                            }}
-                                        />
-                                    )}
-                                </View>
-
-                                {domain && isSignedIn && (
-                                    <>
-                                        <View style={styles.divider} />
-                                        <View style={styles.group}>
-                                            <ActionRow
-                                                icon={faFlag}
-                                                label={`Report ${domain}`}
-                                                tone="danger"
-                                                onPress={() => {
-                                                    handleReport(domain);
-                                                    close();
-                                                }}
-                                            />
-                                        </View>
-                                    </>
-                                )}
-                            </Animated.View>
-                        </GestureDetector>
+                        <Animated.View
+                            style={[
+                                styles.popover,
+                                { top: position.top, left: position.left, width: POPOVER_WIDTH },
+                                animatedStyle,
+                            ]}
+                        >
+                            {menuBody}
+                        </Animated.View>
                     </View>
                 )}
             </View>
@@ -344,79 +332,40 @@ const makeStyles = (theme: Theme) =>
         root: {
             flex: 1,
         },
-        overlay: {
-            ...StyleSheet.absoluteFillObject,
-            justifyContent: 'flex-end',
-        },
-        scrim: {
-            backgroundColor: 'rgba(0, 0, 0, 0.5)',
-        },
-        sheet: {
+        popover: {
+            position: 'absolute',
             backgroundColor: theme.elevated,
-            borderTopLeftRadius: 28,
-            borderTopRightRadius: 28,
-            paddingTop: 10,
-        },
-        // Widens the grab target around the 4pt handle.
-        handle_hitbox: {
-            alignItems: 'center',
+            borderRadius: 16,
+            borderWidth: 1,
+            borderColor: theme.border,
             paddingVertical: 6,
-            paddingBottom: 14,
+            overflow: 'hidden',
+            ...(theme.card_shadow ?? {}),
         },
-        handle: {
-            width: 36,
-            height: 4,
-            borderRadius: 2,
-            backgroundColor: 'rgba(255, 255, 255, 0.16)',
-        },
-        header: {
-            flexDirection: 'row',
-            alignItems: 'flex-start',
-            gap: 12,
-            paddingHorizontal: 20,
-            paddingBottom: 16,
-        },
-        header_accent: {
-            width: 3,
-            height: 32,
-            borderRadius: 2,
-            marginTop: 2,
-        },
-        header_text_block: {
-            flex: 1,
-        },
-        header_label: {
-            fontFamily: 'WorkSans-SemiBold',
-            fontSize: 11,
-            letterSpacing: 1,
-            textTransform: 'uppercase',
-            marginBottom: 3,
-        },
-        header_title: {
-            fontFamily: 'WorkSans-SemiBold',
-            fontSize: 15,
-            lineHeight: 20,
-            color: theme.text,
+        measuring: {
+            top: 0,
+            left: -9999,
+            opacity: 0,
         },
         divider: {
             height: StyleSheet.hairlineWidth,
             backgroundColor: theme.border,
         },
         group: {
-            paddingVertical: 6,
-            paddingHorizontal: 12,
+            paddingVertical: 4,
+            paddingHorizontal: 8,
         },
         row: {
             flexDirection: 'row',
             alignItems: 'center',
-            gap: 14,
-            paddingVertical: 10,
+            gap: 12,
+            paddingVertical: 9,
             paddingHorizontal: 8,
         },
         icon_chip: {
-            width: 32,
-            height: 32,
-            borderRadius: 10,
+            width: 28,
+            height: 28,
+            borderRadius: 9,
             backgroundColor: theme.surface,
             justifyContent: 'center',
             alignItems: 'center',
@@ -429,7 +378,8 @@ const makeStyles = (theme: Theme) =>
         },
         row_label: {
             fontFamily: 'WorkSans-Regular',
-            fontSize: 16,
+            fontSize: 15,
+            flexShrink: 1,
         },
     });
 
