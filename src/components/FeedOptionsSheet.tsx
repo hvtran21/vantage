@@ -1,5 +1,23 @@
-import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
-import { useEffect, useMemo, useState } from 'react';
+import { BackHandler, Pressable, StyleSheet, Text, View } from 'react-native';
+import {
+    createContext,
+    useCallback,
+    useContext,
+    useEffect,
+    useMemo,
+    useRef,
+    useState,
+    type ReactNode,
+} from 'react';
+import Animated, {
+    Extrapolation,
+    interpolate,
+    runOnJS,
+    useAnimatedStyle,
+    useSharedValue,
+    withSpring,
+    withTiming,
+} from 'react-native-reanimated';
 import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
 import type { IconProp } from '@fortawesome/fontawesome-svg-core';
 import {
@@ -12,8 +30,12 @@ import {
     faChevronRight,
 } from '@fortawesome/free-solid-svg-icons';
 import { useTheme, useThemeMode, type Theme, type ThemeMode } from '@/components/Theme';
+import { useMotion } from '@/components/Motion';
+import { scaleMs, scaleSpring } from '@/lib/motion';
 import { getLastQueryTime } from '@/lib/utilities';
 import { relativeTime } from '@/components/NewsCard';
+
+const POP = { damping: 20, stiffness: 300, mass: 0.5 };
 
 const SHOW_OPTIONS = [
     { key: 'Home', icon: faHouse, hint: 'The topics you picked' },
@@ -26,6 +48,26 @@ const APPEARANCE_OPTIONS: { key: ThemeMode; label: string }[] = [
     { key: 'dark', label: 'Dark' },
     { key: 'system', label: 'System' },
 ];
+
+export type FeedOptionsRequest = {
+    filter: string;
+    onSelectFilter: (filter: string) => void;
+    onBlockedSourcesPress: () => void;
+    onRefreshPress: () => void;
+};
+
+type FeedOptionsApi = {
+    open: (request: FeedOptionsRequest) => void;
+    close: () => void;
+};
+
+const FeedOptionsContext = createContext<FeedOptionsApi | null>(null);
+
+export function useFeedOptionsSheet(): FeedOptionsApi {
+    const api = useContext(FeedOptionsContext);
+    if (!api) throw new Error('useFeedOptionsSheet must be used inside FeedOptionsProvider');
+    return api;
+}
 
 function OptionRow({
     styles,
@@ -65,134 +107,176 @@ function OptionRow({
     );
 }
 
-export function FeedOptionsSheet({
-    visible,
-    onClose,
-    filter,
-    onSelectFilter,
-    onBlockedSourcesPress,
-    onRefreshPress,
-}: {
-    visible: boolean;
-    onClose: () => void;
-    filter: string;
-    onSelectFilter: (filter: string) => void;
-    onBlockedSourcesPress: () => void;
-    onRefreshPress: () => void;
-}) {
+// Mounted at the app root (see app/_layout.tsx), same reasoning as
+// ActionSheetProvider: hosted inside the screen tree, the floating tab bar
+// (rendered by the tab navigator above the screen) would stack on top of it.
+export function FeedOptionsProvider({ children }: { children: ReactNode }) {
+    const [request, setRequest] = useState<FeedOptionsRequest | null>(null);
+    const [mounted, setMounted] = useState(false);
     const theme = useTheme();
     const { mode, setMode } = useThemeMode();
+    const { scale } = useMotion();
     const styles = useMemo(() => makeStyles(theme), [theme]);
     const [refreshHint, setRefreshHint] = useState('');
 
+    const progress = useSharedValue(0);
+    const closing = useRef(false);
+
+    const clear = useCallback(() => {
+        closing.current = false;
+        setMounted(false);
+        setRequest(null);
+    }, []);
+
+    const close = useCallback(() => {
+        if (closing.current) return;
+        closing.current = true;
+        progress.value = withTiming(0, { duration: scaleMs(scale, 150) }, (finished) => {
+            if (finished) runOnJS(clear)();
+        });
+    }, [clear, progress, scale]);
+
+    const open = useCallback(
+        (next: FeedOptionsRequest) => {
+            closing.current = false;
+            setRequest(next);
+            setMounted(true);
+            progress.value = scale === 0 ? 1 : withSpring(1, scaleSpring(scale, POP));
+        },
+        [progress, scale],
+    );
+
+    const api = useMemo<FeedOptionsApi>(() => ({ open, close }), [open, close]);
+
     useEffect(() => {
-        if (!visible) return;
+        if (!mounted) return;
+        const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+            close();
+            return true;
+        });
+        return () => sub.remove();
+    }, [mounted, close]);
+
+    useEffect(() => {
+        if (!request) return;
         getLastQueryTime()
             .then((iso) => setRefreshHint(iso ? `Last updated ${relativeTime(iso)}` : ''))
             .catch(() => setRefreshHint(''));
-    }, [visible]);
+    }, [request]);
+
+    const scrimStyle = useAnimatedStyle(() => ({
+        opacity: progress.value,
+    }));
+
+    const sheetStyle = useAnimatedStyle(() => ({
+        opacity: progress.value,
+        transform: [{ scale: interpolate(progress.value, [0, 1], [0.94, 1], Extrapolation.CLAMP) }],
+    }));
 
     return (
-        <Modal
-            visible={visible}
-            transparent
-            animationType="slide"
-            statusBarTranslucent
-            onRequestClose={onClose}
-        >
-            <Pressable style={[styles.dim, { backgroundColor: theme.scrim }]} onPress={onClose} />
-            <View style={styles.sheet}>
-                <View style={styles.grab} />
+        <FeedOptionsContext.Provider value={api}>
+            {children}
 
-                <Text style={styles.seclabel}>Show</Text>
-                {SHOW_OPTIONS.map((option) => (
-                    <OptionRow
-                        key={option.key}
-                        styles={styles}
-                        theme={theme}
-                        icon={option.icon}
-                        name={option.key}
-                        hint={option.hint}
-                        selected={filter === option.key}
-                        onPress={() => {
-                            onSelectFilter(option.key);
-                            onClose();
-                        }}
+            {mounted && request && (
+                <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
+                    <Animated.View
+                        style={[StyleSheet.absoluteFill, styles.scrim, scrimStyle]}
+                        pointerEvents="none"
                     />
-                ))}
+                    <Pressable style={StyleSheet.absoluteFill} onPress={close} />
 
-                <View style={styles.divide} />
-                <Text style={styles.seclabel}>Appearance</Text>
-                <View style={styles.segment}>
-                    {APPEARANCE_OPTIONS.map((option) => (
-                        <Pressable
-                            key={option.key}
-                            onPress={() => setMode(option.key)}
-                            style={[styles.seg, mode === option.key && styles.seg_on]}
-                        >
-                            <Text
-                                style={[styles.seg_text, mode === option.key && styles.seg_text_on]}
-                            >
-                                {option.label}
-                            </Text>
-                        </Pressable>
-                    ))}
+                    <View style={styles.center} pointerEvents="box-none">
+                        <Animated.View style={[styles.sheet, sheetStyle]}>
+                            <Text style={styles.seclabel}>Show</Text>
+                            {SHOW_OPTIONS.map((option) => (
+                                <OptionRow
+                                    key={option.key}
+                                    styles={styles}
+                                    theme={theme}
+                                    icon={option.icon}
+                                    name={option.key}
+                                    hint={option.hint}
+                                    selected={request.filter === option.key}
+                                    onPress={() => {
+                                        request.onSelectFilter(option.key);
+                                        close();
+                                    }}
+                                />
+                            ))}
+
+                            <View style={styles.divide} />
+                            <Text style={styles.seclabel}>Appearance</Text>
+                            <View style={styles.segment}>
+                                {APPEARANCE_OPTIONS.map((option) => (
+                                    <Pressable
+                                        key={option.key}
+                                        onPress={() => setMode(option.key)}
+                                        style={[styles.seg, mode === option.key && styles.seg_on]}
+                                    >
+                                        <Text
+                                            style={[
+                                                styles.seg_text,
+                                                mode === option.key && styles.seg_text_on,
+                                            ]}
+                                        >
+                                            {option.label}
+                                        </Text>
+                                    </Pressable>
+                                ))}
+                            </View>
+
+                            <View style={styles.divide} />
+                            <OptionRow
+                                styles={styles}
+                                theme={theme}
+                                icon={faBan}
+                                name="Blocked sources"
+                                onPress={() => {
+                                    close();
+                                    request.onBlockedSourcesPress();
+                                }}
+                            />
+                            <OptionRow
+                                styles={styles}
+                                theme={theme}
+                                icon={faArrowsRotate}
+                                name="Refresh now"
+                                hint={refreshHint}
+                                onPress={() => {
+                                    close();
+                                    request.onRefreshPress();
+                                }}
+                            />
+                        </Animated.View>
+                    </View>
                 </View>
-
-                <View style={styles.divide} />
-                <OptionRow
-                    styles={styles}
-                    theme={theme}
-                    icon={faBan}
-                    name="Blocked sources"
-                    onPress={() => {
-                        onClose();
-                        onBlockedSourcesPress();
-                    }}
-                />
-                <OptionRow
-                    styles={styles}
-                    theme={theme}
-                    icon={faArrowsRotate}
-                    name="Refresh now"
-                    hint={refreshHint}
-                    onPress={() => {
-                        onClose();
-                        onRefreshPress();
-                    }}
-                />
-            </View>
-        </Modal>
+            )}
+        </FeedOptionsContext.Provider>
     );
 }
 
 const makeStyles = (theme: Theme) =>
     StyleSheet.create({
-        dim: {
+        scrim: {
+            backgroundColor: theme.scrim,
+        },
+        center: {
             flex: 1,
+            justifyContent: 'center',
+            alignItems: 'center',
+            paddingHorizontal: 24,
         },
         sheet: {
-            position: 'absolute',
-            left: 0,
-            right: 0,
-            bottom: 0,
+            width: '100%',
+            maxWidth: 400,
             backgroundColor: theme.elevated,
-            borderTopLeftRadius: 28,
-            borderTopRightRadius: 28,
+            borderRadius: 24,
             borderWidth: 1,
-            borderBottomWidth: 0,
             borderColor: theme.border,
             paddingHorizontal: 20,
-            paddingTop: 10,
-            paddingBottom: 26,
-        },
-        grab: {
-            width: 36,
-            height: 4,
-            borderRadius: 2,
-            alignSelf: 'center',
-            marginBottom: 16,
-            backgroundColor: theme.border_strong,
+            paddingTop: 20,
+            paddingBottom: 20,
+            ...(theme.card_shadow ?? {}),
         },
         seclabel: {
             fontFamily: 'WorkSans-SemiBold',
@@ -272,4 +356,4 @@ const makeStyles = (theme: Theme) =>
         },
     });
 
-export default FeedOptionsSheet;
+export default FeedOptionsProvider;

@@ -6,6 +6,7 @@ import { tokenCache } from '@clerk/expo/token-cache';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ActionSheetProvider } from '@/components/ArticleActionSheet';
+import { FeedOptionsProvider } from '@/components/FeedOptionsSheet';
 import { PrincipalSync } from '@/components/PrincipalSync';
 import { MotionProvider, useMotion } from '@/components/Motion';
 import { ThemeProvider, useTheme } from '@/components/Theme';
@@ -58,7 +59,9 @@ export default function RootLayout() {
                         <ThemeProvider>
                             <MotionProvider>
                                 <ActionSheetProvider>
-                                    <AppNavigator />
+                                    <FeedOptionsProvider>
+                                        <AppNavigator />
+                                    </FeedOptionsProvider>
                                 </ActionSheetProvider>
                             </MotionProvider>
                         </ThemeProvider>

@@ -19,15 +19,10 @@ import { useActionSheet, type AnchorRect } from '@/components/ArticleActionSheet
 import { getDb } from '@/lib/database';
 import { saveArticle, unsaveArticle } from '@/lib/savedArticles';
 import { NewsCard } from '@/components/NewsCard';
-import { FeedOptionsSheet } from '@/components/FeedOptionsSheet';
+import { useFeedOptionsSheet } from '@/components/FeedOptionsSheet';
 import { TabHeader, HeaderRule, TAB_BAR_INSET } from '@/components/styles';
 import { useTheme, type Theme } from '@/components/Theme';
-import {
-    faAngleDown,
-    faCircleXmark,
-    faMagnifyingGlass,
-    faArrowUp,
-} from '@fortawesome/free-solid-svg-icons';
+import { faCircleXmark, faMagnifyingGlass, faArrowUp } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Article from '@/lib/constants';
@@ -72,11 +67,11 @@ export default function HomeFeed() {
     const [loading, setLoading] = useState(true);
     const [filter, setFilter] = useState('Home');
 
-    const [optionsSheetOpen, setOptionsSheetOpen] = useState(false);
     const fadeAnimArticles = useRef(new Animated.Value(0)).current;
     const slideAnimArticles = useRef(new Animated.Value(12)).current;
 
     const actionSheet = useActionSheet();
+    const feedOptions = useFeedOptionsSheet();
     const { scale } = useMotion();
 
     const [refreshing, setRefreshing] = useState(false);
@@ -450,23 +445,20 @@ export default function HomeFeed() {
                         </View>
 
                         <TouchableOpacity
-                            onPress={() => setOptionsSheetOpen(true)}
+                            onPress={() =>
+                                feedOptions.open({
+                                    filter,
+                                    onSelectFilter: setFilter,
+                                    onBlockedSourcesPress: () => router.push('/profile'),
+                                    onRefreshPress: onRefresh,
+                                })
+                            }
                             style={search_styles.filter_pill}
                             activeOpacity={0.7}
                         >
                             <Text style={search_styles.filter_pill_text}>{filter}</Text>
-                            <FontAwesomeIcon icon={faAngleDown} size={11} color={theme.accent} />
                         </TouchableOpacity>
                     </View>
-
-                    <FeedOptionsSheet
-                        visible={optionsSheetOpen}
-                        onClose={() => setOptionsSheetOpen(false)}
-                        filter={filter}
-                        onSelectFilter={setFilter}
-                        onBlockedSourcesPress={() => router.push('/profile')}
-                        onRefreshPress={onRefresh}
-                    />
 
                     {loading && articles.length === 0 ? (
                         <View style={empty_styles.container}>
@@ -624,8 +616,8 @@ const makeSearchStyles = (theme: Theme) =>
             borderColor: theme.accent_border,
             flexDirection: 'row',
             alignItems: 'center',
-            gap: 6,
-            paddingHorizontal: 14,
+            justifyContent: 'center',
+            paddingHorizontal: 16,
         },
         filter_pill_text: {
             fontFamily: 'WorkSans-SemiBold',
