@@ -20,6 +20,7 @@ import {
     faBookmark as faBookmarkSolid,
     faXmark,
     faCheck,
+    faGlobe,
 } from '@fortawesome/free-solid-svg-icons';
 import { faBookmark as faBookmarkOutline } from '@fortawesome/free-regular-svg-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -52,6 +53,7 @@ export default function ArticleDetail() {
     const [saved, setSaved] = useState(false);
     const [imageError, setImageError] = useState(false);
     const [showBrowserModal, setShowBrowserModal] = useState(false);
+    const [showSourceInfoModal, setShowSourceInfoModal] = useState(false);
     const pendingBrowserUrl = useRef<string | null>(null);
     const insets = useSafeAreaInsets();
     const { scale } = useMotion();
@@ -129,7 +131,8 @@ export default function ArticleDetail() {
     const date = formatDate(new Date(article.published_at));
     const label = article.genre || article.category || 'Top';
     const topicColor = getTopicColor(label, theme);
-    const publisher = getPublisherLabel(domainForArticle(article));
+    const domain = domainForArticle(article);
+    const publisher = getPublisherLabel(domain);
     const sourceLabel = publisher?.name ?? article.source;
 
     return (
@@ -174,14 +177,20 @@ export default function ArticleDetail() {
                         {sourceLabel && (
                             <>
                                 <Text style={styles.meta_dot}> </Text>
-                                <Text style={styles.source_text}>{sourceLabel}</Text>
-                                {publisher?.known && (
-                                    <FontAwesomeIcon
-                                        icon={faCheck}
-                                        size={10}
-                                        color={theme.accent}
-                                    />
-                                )}
+                                <TouchableOpacity
+                                    onPress={() => setShowSourceInfoModal(true)}
+                                    hitSlop={8}
+                                    style={styles.source_touch}
+                                >
+                                    <Text style={styles.source_text}>{sourceLabel}</Text>
+                                    {publisher?.known && (
+                                        <FontAwesomeIcon
+                                            icon={faCheck}
+                                            size={10}
+                                            color={theme.accent}
+                                        />
+                                    )}
+                                </TouchableOpacity>
                             </>
                         )}
                     </Animated.View>
@@ -347,6 +356,58 @@ export default function ArticleDetail() {
                         </View>
                     </View>
                 </Modal>
+
+                <Modal
+                    visible={showSourceInfoModal}
+                    transparent
+                    animationType="fade"
+                    statusBarTranslucent
+                    onRequestClose={() => setShowSourceInfoModal(false)}
+                >
+                    <TouchableOpacity
+                        style={styles.modal_backdrop}
+                        activeOpacity={1}
+                        onPress={() => setShowSourceInfoModal(false)}
+                    >
+                        <TouchableOpacity activeOpacity={1} style={styles.modal_card}>
+                            <TouchableOpacity
+                                onPress={() => setShowSourceInfoModal(false)}
+                                hitSlop={12}
+                                style={styles.modal_close_btn}
+                            >
+                                <FontAwesomeIcon
+                                    icon={faXmark}
+                                    size={13}
+                                    color={theme.text_secondary}
+                                />
+                            </TouchableOpacity>
+
+                            <View style={styles.modal_icon_circle}>
+                                <FontAwesomeIcon
+                                    icon={publisher?.known ? faCheck : faGlobe}
+                                    size={18}
+                                    color={theme.accent}
+                                />
+                            </View>
+                            <Text style={styles.modal_title}>
+                                {publisher?.known ? 'Recognized source' : 'Unlisted domain'}
+                            </Text>
+                            <Text style={styles.modal_subtitle}>
+                                {publisher?.known
+                                    ? 'We keep a curated list of established tech publishers and show their real name instead of the bare domain.'
+                                    : "This domain isn't on our list of recognized publishers yet, so we just show it as-is."}
+                            </Text>
+
+                            {domain && (
+                                <View style={styles.modal_url_box}>
+                                    <Text style={styles.modal_url_host} numberOfLines={1}>
+                                        {domain}
+                                    </Text>
+                                </View>
+                            )}
+                        </TouchableOpacity>
+                    </TouchableOpacity>
+                </Modal>
             </SafeAreaView>
         </SafeAreaProvider>
     );
@@ -440,6 +501,11 @@ const makeStyles = (theme: Theme) =>
             fontFamily: 'WorkSans-Light',
             fontSize: 13,
             color: theme.text_tertiary,
+        },
+        source_touch: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 4,
         },
         source_text: {
             fontFamily: 'WorkSans-SemiBold',
