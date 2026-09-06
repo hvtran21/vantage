@@ -11,11 +11,14 @@ import {
     ActivityIndicator,
     TextInput,
     Keyboard,
+    type NativeScrollEvent,
+    type NativeSyntheticEvent,
 } from 'react-native';
 import { SafeAreaView, SafeAreaProvider } from 'react-native-safe-area-context';
 import { useFocusEffect, router } from 'expo-router';
 import { useAuth } from '@clerk/expo';
 import { useActionSheet, type AnchorRect } from '@/components/ArticleActionSheet';
+import { useTabBarScroll } from '@/components/TabBarScroll';
 import { getDb } from '@/lib/database';
 import { saveArticle, unsaveArticle } from '@/lib/savedArticles';
 import { NewsCard } from '@/components/NewsCard';
@@ -101,8 +104,12 @@ export default function HomeFeed() {
     const [showScrollTop, setShowScrollTop] = useState(false);
     const scrollTopAnim = useRef(new Animated.Value(0)).current;
 
+    const { onScroll: tabBarOnScroll } = useTabBarScroll();
+
     const handleScroll = useCallback(
-        (event: { nativeEvent: { contentOffset: { y: number } } }) => {
+        (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+            tabBarOnScroll(event);
+
             const y = event.nativeEvent.contentOffset.y;
             const threshold = 1200; // ~10 cards worth of scrolling
             const shouldShow = y > threshold;
@@ -115,7 +122,7 @@ export default function HomeFeed() {
                 }).start();
             }
         },
-        [showScrollTop, scrollTopAnim],
+        [showScrollTop, scrollTopAnim, tabBarOnScroll],
     );
 
     const scrollToTop = useCallback(() => {
@@ -481,7 +488,7 @@ export default function HomeFeed() {
                                 data={articles}
                                 keyboardShouldPersistTaps="handled"
                                 onScroll={handleScroll}
-                                scrollEventThrottle={100}
+                                scrollEventThrottle={16}
                                 contentContainerStyle={
                                     articles.length === 0
                                         ? {

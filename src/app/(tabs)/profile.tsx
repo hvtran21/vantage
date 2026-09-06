@@ -18,6 +18,7 @@ import {
 import { getInterests, addInterest, removeInterest, syncInterests } from '@/lib/interests';
 import { useMotion } from '@/components/Motion';
 import { scaleMs, withMotion, type MotionPreference } from '@/lib/motion';
+import { useTabBarScroll } from '@/components/TabBarScroll';
 import Animated, { FadeIn } from 'react-native-reanimated';
 
 const genreOptions = [
@@ -328,6 +329,7 @@ function BlockedSources() {
 export default function ProfileScreen() {
     const { user } = useUser();
     const { signOut } = useAuth();
+    const { onScroll: tabBarOnScroll } = useTabBarScroll();
     const theme = useTheme();
     const styles = useMemo(() => makeStyles(theme), [theme]);
     const isSignedIn = !!user;
@@ -352,6 +354,8 @@ export default function ProfileScreen() {
                     contentContainerStyle={styles.scroll_content}
                     showsVerticalScrollIndicator={false}
                     keyboardShouldPersistTaps="handled"
+                    onScroll={tabBarOnScroll}
+                    scrollEventThrottle={16}
                 >
                     <View style={styles.section}>
                         <Text style={styles.section_label}>PROFILE</Text>

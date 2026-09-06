@@ -14,11 +14,13 @@ import { TabHeader, HeaderRule, TAB_BAR_INSET } from '@/components/styles';
 import { useTheme, type Theme } from '@/components/Theme';
 import { useMotion } from '@/components/Motion';
 import { scaleMs, withMotion } from '@/lib/motion';
+import { useTabBarScroll } from '@/components/TabBarScroll';
 import Animated, { FadeIn } from 'react-native-reanimated';
 
 export default function SavedScreen() {
     const [savedArticles, setSavedArticles] = useState<Article[]>([]);
     const actionSheet = useActionSheet();
+    const { onScroll: tabBarOnScroll } = useTabBarScroll();
     const { scale } = useMotion();
     const { getToken } = useAuth();
     const theme = useTheme();
@@ -110,6 +112,8 @@ export default function SavedScreen() {
 
                 <FlatList
                     showsVerticalScrollIndicator={false}
+                    onScroll={tabBarOnScroll}
+                    scrollEventThrottle={16}
                     data={savedArticles}
                     contentContainerStyle={
                         savedArticles.length === 0

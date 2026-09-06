@@ -14,12 +14,24 @@ import {
 } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
-import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
+import Animated, {
+    Extrapolation,
+    interpolate,
+    useAnimatedStyle,
+    useSharedValue,
+    withSpring,
+    withTiming,
+} from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme, type Theme } from '@/components/Theme';
+import { TabBarScrollProvider, useTabBarScroll } from '@/components/TabBarScroll';
 
 const INDICATOR_INSET = 6;
 const SLIDE = { damping: 18, stiffness: 190, mass: 0.6 };
+// How much smaller the bar gets at full collapse -- shrinks everything
+// (icons, labels, padding, border) together via transform so nothing gets
+// cut off, it's just proportionally smaller.
+const COLLAPSED_SCALE = 0.82;
 
 // dimezisBlurView only became dependable in API 31; below that it can no-op.
 const ANDROID_BLUR = Platform.OS === 'android' && Number(Platform.Version) >= 31;
@@ -36,6 +48,7 @@ function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
 
     const indicatorX = useSharedValue(0);
     const lastItemWidth = useRef(0);
+    const { collapse } = useTabBarScroll();
 
     useEffect(() => {
         if (!itemWidth) return;
@@ -46,8 +59,30 @@ function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
         indicatorX.value = resized ? target : withSpring(target, SLIDE);
     }, [state.index, itemWidth, indicatorX]);
 
+    // A tab switch always lands back at full size -- the screen you just
+    // left being scrolled down shouldn't leave the bar shrunk on the one you
+    // switched to.
+    useEffect(() => {
+        collapse.value = withTiming(0, { duration: 200 });
+    }, [state.index, collapse]);
+
     const indicatorStyle = useAnimatedStyle(() => ({
         transform: [{ translateX: indicatorX.value }],
+    }));
+
+    // Scales the whole bar down at once -- icons, labels, padding and border
+    // all shrink together, so nothing gets clipped, it just gets smaller.
+    const barStyle = useAnimatedStyle(() => ({
+        transform: [
+            {
+                scale: interpolate(
+                    collapse.value,
+                    [0, 1],
+                    [1, COLLAPSED_SCALE],
+                    Extrapolation.CLAMP,
+                ),
+            },
+        ],
     }));
 
     const onPillLayout = (event: LayoutChangeEvent) => {
@@ -55,7 +90,7 @@ function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
     };
 
     return (
-        <View style={[tab_styles.wrapper, { bottom: insets.bottom + 16 }]}>
+        <Animated.View style={[tab_styles.wrapper, { bottom: insets.bottom + 16 }, barStyle]}>
             <View style={tab_styles.pill} onLayout={onPillLayout}>
                 {BLURRED && (
                     <BlurView
@@ -135,44 +170,46 @@ function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
                     );
                 })}
             </View>
-        </View>
+        </Animated.View>
     );
 }
 
 export default function TabLayout() {
     return (
-        <Tabs
-            tabBar={(props) => <CustomTabBar {...props} />}
-            screenOptions={{ headerShown: false }}
-        >
-            <Tabs.Screen
-                name="index"
-                options={{
-                    title: 'Feed',
-                    tabBarIcon: ({ color }) => (
-                        <FontAwesomeIcon icon={faHome} size={19} color={color} />
-                    ),
-                }}
-            />
-            <Tabs.Screen
-                name="profile"
-                options={{
-                    title: 'Profile',
-                    tabBarIcon: ({ color }) => (
-                        <FontAwesomeIcon icon={faUser} size={17} color={color} />
-                    ),
-                }}
-            />
-            <Tabs.Screen
-                name="saved"
-                options={{
-                    title: 'Saved',
-                    tabBarIcon: ({ color }) => (
-                        <FontAwesomeIcon icon={faBookmark} size={16} color={color} />
-                    ),
-                }}
-            />
-        </Tabs>
+        <TabBarScrollProvider>
+            <Tabs
+                tabBar={(props) => <CustomTabBar {...props} />}
+                screenOptions={{ headerShown: false }}
+            >
+                <Tabs.Screen
+                    name="index"
+                    options={{
+                        title: 'Feed',
+                        tabBarIcon: ({ color }) => (
+                            <FontAwesomeIcon icon={faHome} size={19} color={color} />
+                        ),
+                    }}
+                />
+                <Tabs.Screen
+                    name="profile"
+                    options={{
+                        title: 'Profile',
+                        tabBarIcon: ({ color }) => (
+                            <FontAwesomeIcon icon={faUser} size={17} color={color} />
+                        ),
+                    }}
+                />
+                <Tabs.Screen
+                    name="saved"
+                    options={{
+                        title: 'Saved',
+                        tabBarIcon: ({ color }) => (
+                            <FontAwesomeIcon icon={faBookmark} size={16} color={color} />
+                        ),
+                    }}
+                />
+            </Tabs>
+        </TabBarScrollProvider>
     );
 }
 
