@@ -23,7 +23,6 @@ import { FeedOptionsSheet } from '@/components/FeedOptionsSheet';
 import { TabHeader, HeaderRule, TAB_BAR_INSET } from '@/components/styles';
 import { useTheme, type Theme } from '@/components/Theme';
 import {
-    faEllipsis,
     faAngleDown,
     faCircleXmark,
     faMagnifyingGlass,
@@ -412,24 +411,7 @@ export default function HomeFeed() {
         <SafeAreaProvider>
             <SafeAreaView style={base_template.theme} edges={['top', 'left', 'right']}>
                 <View style={base_template.config}>
-                    <TabHeader
-                        title="Feed"
-                        subtitle="Your news"
-                        rightAccessory={
-                            <TouchableOpacity
-                                onPress={() => setOptionsSheetOpen(true)}
-                                style={base_template.header_ellipsis}
-                                activeOpacity={0.6}
-                                hitSlop={6}
-                            >
-                                <FontAwesomeIcon
-                                    icon={faEllipsis}
-                                    size={17}
-                                    color={theme.text_secondary}
-                                />
-                            </TouchableOpacity>
-                        }
-                    />
+                    <TabHeader title="Feed" subtitle="Your news" />
                     <HeaderRule />
 
                     <View style={search_styles.controls}>
@@ -685,15 +667,5 @@ const makeBaseTemplate = (theme: Theme) =>
             flex: 1,
             width: '100%',
             flexDirection: 'column',
-        },
-        header_ellipsis: {
-            width: 38,
-            height: 38,
-            borderRadius: 19,
-            backgroundColor: theme.elevated,
-            borderWidth: 1,
-            borderColor: theme.border,
-            justifyContent: 'center',
-            alignItems: 'center',
         },
     });
