@@ -23,8 +23,10 @@ import {
 } from '@fortawesome/free-solid-svg-icons';
 import { faBookmark as faBookmarkOutline } from '@fortawesome/free-regular-svg-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useAuth } from '@clerk/expo';
 import Article from '@/lib/constants';
 import { getDb } from '@/lib/database';
+import { saveArticle, unsaveArticle } from '@/lib/savedArticles';
 import { formatDate } from '@/components/NewsCard';
 import { getTopicColor, hexToRgba, useTheme, type Theme } from '@/components/Theme';
 import { stripHtml } from '@/lib/utilities';
@@ -53,6 +55,7 @@ export default function ArticleDetail() {
     const pendingBrowserUrl = useRef<string | null>(null);
     const insets = useSafeAreaInsets();
     const { scale } = useMotion();
+    const { getToken } = useAuth();
     const theme = useTheme();
     const styles = useMemo(() => makeStyles(theme), [theme]);
 
@@ -72,11 +75,17 @@ export default function ArticleDetail() {
 
     const handleSave = async () => {
         if (!article) return;
-        const db = await getDb();
-        const newSaved = saved ? 0 : 1;
-        await db.runAsync('UPDATE articles SET saved = ? WHERE id = ?', [newSaved, article.id]);
-        setArticle({ ...article, saved: newSaved });
-        setSaved(!saved);
+        const next = !saved;
+        // Flip optimistically; saveArticle/unsaveArticle write straight to
+        // SQLite themselves and unsaveArticle already rolls back on failure.
+        setArticle({ ...article, saved: next ? 1 : 0 });
+        setSaved(next);
+        const token = (await getToken()) ?? undefined;
+        if (next) {
+            await saveArticle(article.id, token);
+        } else {
+            await unsaveArticle(article.id, token);
+        }
     };
 
     // Presenting the in-app browser while the confirmation <Modal> is still mid-dismiss

@@ -3,6 +3,7 @@ import { useAuth } from '@clerk/expo';
 import { getAnonId } from '@/lib/principal';
 import { BASE_URL } from '@/lib/services';
 import { replaceLocalBlocklist } from '@/lib/sources';
+import { replaceLocalSavedArticles } from '@/lib/savedArticles';
 
 /**
  * Points the device's preferences at whoever is currently acting. Renders
@@ -32,12 +33,18 @@ export function PrincipalSync() {
             }
             if (cancelled) return;
 
-            // Replace, not union -- see replaceLocalBlocklist.
-            const mirrored = await replaceLocalBlocklist(token);
+            // Replace, not union -- see replaceLocalBlocklist. Sequential, not
+            // Promise.all: both open a SQLite transaction on the single shared
+            // connection, and expo-sqlite has no support for two open at once.
+            const blocklistMirrored = await replaceLocalBlocklist(token);
+            if (cancelled) return;
+            const savedMirrored = await replaceLocalSavedArticles(token);
 
-            // Only claim it once the mirror landed, or a swallowed failure would
-            // leave the blocklist stale for the session.
-            if (!cancelled && mirrored) activePrincipal.current = principal;
+            // Only claim it once both mirrors landed, or a swallowed failure
+            // would leave one of them stale for the session.
+            if (!cancelled && blocklistMirrored && savedMirrored) {
+                activePrincipal.current = principal;
+            }
         })().catch((error) => {
             // Non-fatal; activePrincipal stays unset so the next change retries.
             console.warn('[principal] sync failed:', error);
@@ -65,11 +72,14 @@ async function linkAnonPrincipal(token: string): Promise<void> {
             return;
         }
 
-        const { linked, merged } = (await response.json()) as {
+        const { linked, merged, mergedSaves } = (await response.json()) as {
             linked: boolean;
             merged: number;
+            mergedSaves: number;
         };
-        console.log(`[principal] linked=${linked} merged=${merged} block(s)`);
+        console.log(
+            `[principal] linked=${linked} merged=${merged} block(s), ${mergedSaves} save(s)`,
+        );
     } catch (error) {
         console.warn('[principal] link-anon failed:', error);
     }

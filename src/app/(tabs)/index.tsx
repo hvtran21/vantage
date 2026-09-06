@@ -17,6 +17,7 @@ import { useFocusEffect, router } from 'expo-router';
 import { useAuth } from '@clerk/expo';
 import { useActionSheet } from '@/components/ArticleActionSheet';
 import { getDb } from '@/lib/database';
+import { saveArticle, unsaveArticle } from '@/lib/savedArticles';
 import { NewsCard } from '@/components/NewsCard';
 import { FeedOptionsSheet } from '@/components/FeedOptionsSheet';
 import { TabHeader, HeaderRule, TAB_BAR_INSET } from '@/components/styles';
@@ -240,11 +241,12 @@ export default function HomeFeed() {
                 article,
                 saved: article.saved === 1,
                 onToggleSave: async (next) => {
-                    const db = await getDb();
-                    await db.runAsync('UPDATE articles SET saved = ? WHERE id = ?', [
-                        next ? 1 : 0,
-                        article.id,
-                    ]);
+                    const token = (await getToken()) ?? undefined;
+                    if (next) {
+                        await saveArticle(article.id, token);
+                    } else {
+                        await unsaveArticle(article.id, token);
+                    }
                     setArticles((prev) =>
                         prev.map((item) =>
                             item.id === article.id ? { ...item, saved: next ? 1 : 0 } : item,
@@ -260,7 +262,7 @@ export default function HomeFeed() {
                 },
             });
         },
-        [articles, actionSheet],
+        [articles, actionSheet, getToken],
     );
 
     const animateContent = useCallback(() => {

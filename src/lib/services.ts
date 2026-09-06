@@ -194,7 +194,7 @@ async function searchArticlesRemote(query: string, token?: string) {
     }
 }
 
-async function cacheArticles(articles: Article[]): Promise<number> {
+export async function cacheArticles(articles: Article[]): Promise<number> {
     const db = await getDb();
     const statement = await db.prepareAsync(
         'INSERT OR IGNORE INTO articles(id, genre, category, source, author, title, description, url, url_to_image, published_at, content, saved, source_domain) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',

@@ -92,6 +92,18 @@ const MIGRATIONS: Migration[] = [
             console.log(`[db] backfilled source_domain for ${rows.length} article(s)`);
         },
     },
+    {
+        version: 3,
+        run: async (db) => {
+            // No CHECK constraint: unlike the columns in the original CREATE
+            // TABLE, SQLite's ADD COLUMN doesn't reliably support adding one.
+            await addColumn(db, 'articles', 'save_synced', 'INTEGER NOT NULL DEFAULT 1');
+            // Anything already saved predates server sync entirely -- treat it as
+            // pending so the next sync pushes it up instead of it looking synced
+            // and never leaving the device.
+            await db.execAsync('UPDATE articles SET save_synced = 0 WHERE saved = 1');
+        },
+    },
 ];
 
 async function getUserVersion(db: SQLiteDatabase): Promise<number> {
