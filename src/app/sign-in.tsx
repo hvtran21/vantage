@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
     View,
     Text,
@@ -20,6 +20,9 @@ import { useTheme, type Theme } from '@/components/Theme';
 
 type Mode = 'sign-in' | 'sign-up';
 
+// Clerk's email verification codes are always 6 digits.
+const CODE_LENGTH = 6;
+
 export default function SignInPage() {
     const theme = useTheme();
     const styles = useMemo(() => makeStyles(theme), [theme]);
@@ -33,6 +36,7 @@ export default function SignInPage() {
     const { signIn } = useSignIn();
     const { signUp } = useSignUp();
 
+    // check signIn.status when it changes see if we can move them forward.
     useEffect(() => {
         if (signIn.status === 'complete') {
             signIn.finalize().then(() => router.replace('/(tabs)'));
@@ -92,6 +96,21 @@ export default function SignInPage() {
         if (error) setErrorMessage(error.message ?? 'Invalid code');
     };
 
+    // Auto-submits once the code reaches full length, keyed by the code value
+    // itself (not `submitting`) so a failed attempt doesn't retry in a loop --
+    // it only fires again once the user actually changes the digits.
+    const autoSubmittedCode = useRef<string | null>(null);
+    useEffect(() => {
+        if (
+            pendingVerification &&
+            code.length === CODE_LENGTH &&
+            autoSubmittedCode.current !== code
+        ) {
+            autoSubmittedCode.current = code;
+            handleVerifyCode();
+        }
+    }, [code, pendingVerification]);
+
     const handleSkip = async () => {
         await AsyncStorage.setItem('skippedAuth', 'true');
         router.replace('/(tabs)');
@@ -127,6 +146,7 @@ export default function SignInPage() {
                                         value={code}
                                         onChangeText={setCode}
                                         keyboardType="number-pad"
+                                        maxLength={CODE_LENGTH}
                                         autoFocus
                                     />
                                 </>
