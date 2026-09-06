@@ -4,6 +4,7 @@ import { getAnonId } from '@/lib/principal';
 import { BASE_URL } from '@/lib/services';
 import { replaceLocalBlocklist } from '@/lib/sources';
 import { replaceLocalSavedArticles } from '@/lib/savedArticles';
+import { replaceLocalInterests } from '@/lib/interests';
 
 /**
  * Points the device's preferences at whoever is currently acting. Renders
@@ -34,15 +35,18 @@ export function PrincipalSync() {
             if (cancelled) return;
 
             // Replace, not union -- see replaceLocalBlocklist. Sequential, not
-            // Promise.all: both open a SQLite transaction on the single shared
-            // connection, and expo-sqlite has no support for two open at once.
+            // Promise.all: the first two open a SQLite transaction on the single
+            // shared connection, and expo-sqlite has no support for two open at
+            // once. Interests don't touch SQLite, but join the same chain anyway.
             const blocklistMirrored = await replaceLocalBlocklist(token);
             if (cancelled) return;
             const savedMirrored = await replaceLocalSavedArticles(token);
+            if (cancelled) return;
+            const interestsMirrored = await replaceLocalInterests(token);
 
-            // Only claim it once both mirrors landed, or a swallowed failure
+            // Only claim it once every mirror landed, or a swallowed failure
             // would leave one of them stale for the session.
-            if (!cancelled && blocklistMirrored && savedMirrored) {
+            if (!cancelled && blocklistMirrored && savedMirrored && interestsMirrored) {
                 activePrincipal.current = principal;
             }
         })().catch((error) => {
@@ -72,13 +76,14 @@ async function linkAnonPrincipal(token: string): Promise<void> {
             return;
         }
 
-        const { linked, merged, mergedSaves } = (await response.json()) as {
+        const { linked, merged, mergedSaves, mergedInterests } = (await response.json()) as {
             linked: boolean;
             merged: number;
             mergedSaves: number;
+            mergedInterests: number;
         };
         console.log(
-            `[principal] linked=${linked} merged=${merged} block(s), ${mergedSaves} save(s)`,
+            `[principal] linked=${linked} merged=${merged} block(s), ${mergedSaves} save(s), ${mergedInterests} interest(s)`,
         );
     } catch (error) {
         console.warn('[principal] link-anon failed:', error);

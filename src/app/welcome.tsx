@@ -4,10 +4,10 @@ import { useEffect, useMemo, useState } from 'react';
 import { router } from 'expo-router';
 import { faArrowRight } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import Animated, { FadeIn, FadeInDown, FadeInUp } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
 import { initializeDatabase } from '@/lib/database';
+import { addInterest } from '@/lib/interests';
 import { getTopicColor, useTheme, type Theme } from '@/components/Theme';
 import { useMotion } from '@/components/Motion';
 import { scaleMs, withMotion } from '@/lib/motion';
@@ -51,8 +51,10 @@ export default function WelcomePage() {
     }, []);
 
     const handleSubmit = async () => {
-        if (userGenreSelection.length > 0) {
-            await AsyncStorage.setItem('genreSelection', userGenreSelection.join(','));
+        // No token yet -- goes through under the device's anon principal, same as
+        // any other pre-sign-in preference, and link-anon folds it in on sign-in.
+        for (const genre of userGenreSelection) {
+            await addInterest(genre);
         }
         router.replace('/sign-in');
     };

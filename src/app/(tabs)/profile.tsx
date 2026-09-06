@@ -15,6 +15,7 @@ import {
     unblockSource,
     type BlockedSource,
 } from '@/lib/sources';
+import { getInterests, addInterest, removeInterest, syncInterests } from '@/lib/interests';
 import { useMotion } from '@/components/Motion';
 import { scaleMs, withMotion, type MotionPreference } from '@/lib/motion';
 import Animated, { FadeIn } from 'react-native-reanimated';
@@ -40,33 +41,41 @@ function GenrePreferences() {
     const [selected, setSelected] = useState<string[]>([]);
     const [saved, setSaved] = useState(false);
     const [loaded, setLoaded] = useState(false);
+    const { isSignedIn, getToken } = useAuth();
     const { scale } = useMotion();
     const theme = useTheme();
     const styles = useMemo(() => makeStyles(theme), [theme]);
 
+    // Held in a ref so the focus effect has no dependencies -- see BlockedSources
+    // below for why depending on getToken directly caused a request loop.
+    const getTokenRef = useRef(getToken);
+    getTokenRef.current = getToken;
+
     useFocusEffect(
         useCallback(() => {
-            const load = async () => {
-                const stored = await AsyncStorage.getItem('genreSelection');
-                if (stored) setSelected(stored.split(','));
+            let cancelled = false;
+            (async () => {
+                const token = (await getTokenRef.current()) ?? undefined;
+                await syncInterests(token);
+                if (cancelled) return;
+                setSelected(await getInterests());
                 setLoaded(true);
+            })().catch((error) => console.warn('[profile] could not load interests:', error));
+            return () => {
+                cancelled = true;
             };
-            load();
         }, []),
     );
 
     const toggle = async (genre: string) => {
-        let next: string[];
-        if (selected.includes(genre)) {
-            next = selected.filter((g) => g !== genre);
-        } else {
-            next = [...selected, genre];
-        }
-        setSelected(next);
-        if (next.length > 0) {
-            await AsyncStorage.setItem('genreSelection', next.join(','));
-        } else {
-            await AsyncStorage.removeItem('genreSelection');
+        const adding = !selected.includes(genre);
+        setSelected((prev) => (adding ? [...prev, genre] : prev.filter((g) => g !== genre)));
+
+        const token = isSignedIn ? await getToken() : null;
+        if (adding) {
+            await addInterest(genre, token);
+        } else if (!(await removeInterest(genre, token))) {
+            setSelected(await getInterests());
         }
         setSaved(true);
         setTimeout(() => setSaved(false), 1500);
