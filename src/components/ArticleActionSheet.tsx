@@ -121,13 +121,19 @@ function computePosition(
     menuHeight: number,
     insets: { top: number; bottom: number },
 ): Position {
+    // measureInWindow reports y within the safe-content area (below the status
+    // bar), but this overlay is mounted above the per-screen SafeAreaView and
+    // positions itself from the true top of the screen -- without adding the
+    // inset back, the popover renders a whole status-bar-height too high.
+    const anchorTop = anchor.y + insets.top;
+
     let left = anchor.x + anchor.width - POPOVER_WIDTH;
     left = Math.min(Math.max(left, MARGIN), SCREEN_WIDTH - POPOVER_WIDTH - MARGIN);
 
     const bottomObstruction = insets.bottom + TAB_BAR_ZONE + MARGIN;
-    const spaceBelow = SCREEN_HEIGHT - bottomObstruction - (anchor.y + anchor.height + GAP);
+    const spaceBelow = SCREEN_HEIGHT - bottomObstruction - (anchorTop + anchor.height + GAP);
     const opensUpward = spaceBelow < menuHeight;
-    const top = opensUpward ? anchor.y - GAP - menuHeight : anchor.y + anchor.height + GAP;
+    const top = opensUpward ? anchorTop - GAP - menuHeight : anchorTop + anchor.height + GAP;
 
     return { top: Math.max(top, insets.top + MARGIN), left };
 }
