@@ -16,6 +16,7 @@ import {
     Pressable,
     BackHandler,
     Dimensions,
+    Platform,
     type LayoutChangeEvent,
 } from 'react-native';
 import Animated, {
@@ -121,11 +122,13 @@ function computePosition(
     menuHeight: number,
     insets: { top: number; bottom: number },
 ): Position {
-    // measureInWindow reports y within the safe-content area (below the status
-    // bar), but this overlay is mounted above the per-screen SafeAreaView and
-    // positions itself from the true top of the screen -- without adding the
-    // inset back, the popover renders a whole status-bar-height too high.
-    const anchorTop = anchor.y + insets.top;
+    // On Android, measureInWindow reports y within the safe-content area
+    // (below the status bar), but this overlay positions itself from the true
+    // top of the screen -- without adding the inset back, the popover renders
+    // a whole status-bar-height too high. iOS's measureInWindow is already
+    // relative to the true screen top, so adding it there double-counts the
+    // inset and pushes the popover too far down instead.
+    const anchorTop = anchor.y + (Platform.OS === 'android' ? insets.top : 0);
 
     let left = anchor.x + anchor.width - POPOVER_WIDTH;
     left = Math.min(Math.max(left, MARGIN), SCREEN_WIDTH - POPOVER_WIDTH - MARGIN);
