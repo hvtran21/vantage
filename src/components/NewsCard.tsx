@@ -1,7 +1,7 @@
 import { Text, View, StyleSheet, TouchableOpacity } from 'react-native';
 import { Image } from 'expo-image';
 import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
-import { faEllipsisVertical, faCheck } from '@fortawesome/free-solid-svg-icons';
+import { faEllipsisVertical, faEllipsis, faCheck } from '@fortawesome/free-solid-svg-icons';
 import { useEffect, useMemo, useRef, useState, type ElementRef, type ReactNode } from 'react';
 import { router } from 'expo-router';
 import Animated, { FadeIn } from 'react-native-reanimated';
@@ -148,11 +148,13 @@ function EllipsisButton({
     theme,
     style,
     size = 14,
+    icon = faEllipsisVertical,
     onPress,
 }: {
     theme: Theme;
     style?: object;
     size?: number;
+    icon?: typeof faEllipsisVertical;
     onPress: (anchor: AnchorRect) => void;
 }) {
     const ref = useRef<ElementRef<typeof TouchableOpacity>>(null);
@@ -172,7 +174,7 @@ function EllipsisButton({
             hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
             style={style}
         >
-            <FontAwesomeIcon icon={faEllipsisVertical} size={size} color={theme.text_tertiary} />
+            <FontAwesomeIcon icon={icon} size={size} color={theme.text_tertiary} />
         </TouchableOpacity>
     );
 }
@@ -296,6 +298,7 @@ export const NewsCard = ({
             <EllipsisButton
                 theme={theme}
                 style={styles.row_ellipsis_btn}
+                icon={faEllipsis}
                 onPress={(anchor) => handleEllipsisPress(id, anchor)}
             />
         </Animated.View>
@@ -383,15 +386,15 @@ const makeCardStyle = (theme: Theme) =>
             fontSize: 12,
             color: theme.text_tertiary,
         },
-        // alignItems: 'center' on `row` centers this against the text column,
-        // which for a short (1-line) title used to push it up under the
-        // ellipsis -- pinned to the top instead, with enough clearance to
-        // always sit below it, regardless of how many lines the title takes.
+        // Standard row's ellipsis is horizontal (faEllipsis), whose ink sits in
+        // a thin band across the middle of its 14px box rather than filling
+        // it top-to-bottom, so a short marginTop keeps `row`'s normal
+        // alignItems: 'center' behavior while still clearing that band even
+        // when a short title leaves this the tallest thing in the row.
         thumbnail_frame: {
             width: 96,
             height: 96,
-            alignSelf: 'flex-start',
-            marginTop: 20,
+            marginTop: 10,
         },
         thumbnail_image: {
             width: '100%',
