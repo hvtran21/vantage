@@ -331,10 +331,16 @@ export default function HomeFeed() {
 
     useFocusEffect(
         useCallback(() => {
-            if (initialLoadDone.current) {
-                resetContentAnim();
-                animateContent();
-            }
+            // Entrance animation deliberately does NOT replay here. useFocusEffect
+            // re-fires on every focus regain -- including the below-screen focus
+            // react-navigation sends mid-drag during iOS's interactive swipe-back
+            // from article/[id] -- not just on true first mount. Re-running
+            // resetContentAnim/animateContent from here made the feed's fade/slide
+            // replay every time you swiped back, since that focus fires while the
+            // list is already visible. animateContent() is already invoked once by
+            // the initial-load effect and again on deliberate filter changes below;
+            // that's the only entrance animation this screen needs.
+            //
             // The sheet reads `saved` straight from list state now, so refresh it
             // in case the article screen changed it while we were away.
             (async () => {
@@ -350,7 +356,7 @@ export default function HomeFeed() {
                     }),
                 );
             })();
-        }, [resetContentAnim, animateContent]),
+        }, []),
     );
 
     useEffect(() => {
