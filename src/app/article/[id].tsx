@@ -137,7 +137,7 @@ export default function ArticleDetail() {
 
     return (
         <SafeAreaProvider>
-            <StatusBar style="light" translucent />
+            <StatusBar style="light" />
             <SafeAreaView style={styles.theme} edges={['left', 'right']}>
                 <ScrollView
                     showsVerticalScrollIndicator={false}

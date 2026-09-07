@@ -1,6 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ComponentProps } from 'react';
 import { Tabs } from 'expo-router';
-import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
 import { faHome, faBookmark, faUser } from '@fortawesome/free-solid-svg-icons';
 import {
@@ -37,9 +36,14 @@ const COLLAPSED_SCALE = 0.82;
 const ANDROID_BLUR = Platform.OS === 'android' && Number(Platform.Version) >= 31;
 const BLURRED = Platform.OS === 'ios' || ANDROID_BLUR;
 
+// Derived from Tabs itself (rather than imported from @react-navigation/
+// bottom-tabs) because expo-router re-declares this type on its own, and the
+// two have drifted apart before -- this stays correct by construction.
+type CustomTabBarProps = Parameters<NonNullable<ComponentProps<typeof Tabs>['tabBar']>>[0];
+
 // Fully custom tab bar. react-navigation's default button reserves its own
 // bottom padding that can't be overridden cleanly, so we own the layout instead.
-function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
+function CustomTabBar({ state, descriptors, navigation }: CustomTabBarProps) {
     const insets = useSafeAreaInsets();
     const theme = useTheme();
     const tab_styles = useMemo(() => makeTabStyles(theme), [theme]);
@@ -186,7 +190,7 @@ export default function TabLayout() {
                     options={{
                         title: 'Feed',
                         tabBarIcon: ({ color }) => (
-                            <FontAwesomeIcon icon={faHome} size={19} color={color} />
+                            <FontAwesomeIcon icon={faHome} size={19} color={color as string} />
                         ),
                     }}
                 />
@@ -195,7 +199,7 @@ export default function TabLayout() {
                     options={{
                         title: 'Profile',
                         tabBarIcon: ({ color }) => (
-                            <FontAwesomeIcon icon={faUser} size={17} color={color} />
+                            <FontAwesomeIcon icon={faUser} size={17} color={color as string} />
                         ),
                     }}
                 />
@@ -204,7 +208,7 @@ export default function TabLayout() {
                     options={{
                         title: 'Saved',
                         tabBarIcon: ({ color }) => (
-                            <FontAwesomeIcon icon={faBookmark} size={16} color={color} />
+                            <FontAwesomeIcon icon={faBookmark} size={16} color={color as string} />
                         ),
                     }}
                 />

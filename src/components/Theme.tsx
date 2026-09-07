@@ -13,6 +13,13 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 export type ThemeMode = 'light' | 'dark' | 'system';
 type ResolvedScheme = 'light' | 'dark';
 
+// Appearance can report 'unspecified' (no OS-level preference set) alongside
+// null/undefined; all three fall back to dark the same way, so this is the
+// single place that decides what "no real preference" resolves to.
+function toResolvedScheme(scheme: ReturnType<typeof Appearance.getColorScheme>): ResolvedScheme {
+    return scheme === 'light' ? 'light' : 'dark';
+}
+
 const STORAGE_KEY = 'themeMode';
 
 type ShadowStyle = {
@@ -118,8 +125,8 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     // the app has only ever been dark, so "system" would silently flip it
     // light for anyone whose phone happens to be in light mode.
     const [mode, setModeState] = useState<ThemeMode>('dark');
-    const [systemScheme, setSystemScheme] = useState<ResolvedScheme>(
-        () => Appearance.getColorScheme() ?? 'dark',
+    const [systemScheme, setSystemScheme] = useState<ResolvedScheme>(() =>
+        toResolvedScheme(Appearance.getColorScheme()),
     );
 
     useEffect(() => {
@@ -135,7 +142,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     // always rather than mount/unmount the listener as mode changes.
     useEffect(() => {
         const sub = Appearance.addChangeListener(({ colorScheme }) => {
-            setSystemScheme(colorScheme ?? 'dark');
+            setSystemScheme(toResolvedScheme(colorScheme));
         });
         return () => sub.remove();
     }, []);
