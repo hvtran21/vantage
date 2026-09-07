@@ -126,6 +126,7 @@ export default function HomeFeed() {
     );
 
     const scrollToTop = useCallback(() => {
+        Keyboard.dismiss();
         flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
     }, []);
 
@@ -172,6 +173,7 @@ export default function HomeFeed() {
     );
 
     const onRefresh = useCallback(async () => {
+        Keyboard.dismiss();
         const canRefresh = await canRefreshArticles();
         if (!canRefresh) return;
 
@@ -234,6 +236,7 @@ export default function HomeFeed() {
 
     const handleEllipsisPress = useCallback(
         (id: string, anchor: AnchorRect) => {
+            Keyboard.dismiss();
             // The row is already in state from rendering the card, so the sheet
             // can open on this tick rather than after a SQLite round trip.
             const article = articles.find((item) => item.id === id);
@@ -461,14 +464,15 @@ export default function HomeFeed() {
                         </View>
 
                         <TouchableOpacity
-                            onPress={() =>
+                            onPress={() => {
+                                Keyboard.dismiss();
                                 feedOptions.open({
                                     filter,
                                     onSelectFilter: setFilter,
                                     onBlockedSourcesPress: () => router.push('/profile'),
                                     onRefreshPress: onRefresh,
-                                })
-                            }
+                                });
+                            }}
                             style={search_styles.filter_pill}
                             activeOpacity={0.7}
                         >

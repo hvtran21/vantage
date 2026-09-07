@@ -1,4 +1,4 @@
-import { Text, View, StyleSheet, TouchableOpacity } from 'react-native';
+import { Text, View, StyleSheet, TouchableOpacity, Keyboard } from 'react-native';
 import { Image } from 'expo-image';
 import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
 import { faEllipsisVertical, faEllipsis, faCheck } from '@fortawesome/free-solid-svg-icons';
@@ -163,6 +163,7 @@ function EllipsisButton({
 
     const handlePress = () => {
         haptics.light();
+        Keyboard.dismiss();
         // The menu anchors to wherever this button actually is on screen, not a
         // fixed spot, so it has to ask the native view for its own position.
         ref.current?.measureInWindow((x: number, y: number, width: number, height: number) => {
@@ -213,6 +214,7 @@ export const NewsCard = ({
 
     const handleCardPress = () => {
         haptics.light();
+        Keyboard.dismiss();
         router.push({ pathname: '/article/[id]', params: { id } });
     };
 
