@@ -70,6 +70,28 @@ const getNetworkScope = (
     return null;
 };
 
+function FeedEmptyState({
+    scale,
+    styles,
+    isSearching,
+}: {
+    scale: number;
+    styles: ReturnType<typeof makeEmptyStyles>;
+    isSearching: boolean;
+}) {
+    return (
+        <ReAnimated.View
+            entering={withMotion(scale, () => FadeIn.duration(scaleMs(scale, 500)))}
+            style={styles.container}
+        >
+            <Text style={styles.title}>{isSearching ? 'No results' : 'No articles yet'}</Text>
+            <Text style={styles.subtitle}>
+                {isSearching ? 'Try different keywords.' : 'Pull down to refresh.'}
+            </Text>
+        </ReAnimated.View>
+    );
+}
+
 export default function HomeFeed() {
     const { getToken } = useAuth();
     const theme = useTheme();
@@ -370,7 +392,7 @@ export default function HomeFeed() {
     useEffect(() => {
         resetContentAnim();
         animateContent();
-    }, [filter]);
+    }, [filter, resetContentAnim, animateContent]);
 
     useFocusEffect(
         useCallback(() => {
@@ -421,6 +443,10 @@ export default function HomeFeed() {
             }
         };
         loadArticles();
+        // Deliberately mount-only: syncAndCaptureCursors closes over Clerk's
+        // getToken, which isn't referentially stable, so listing it here would
+        // re-run this initial load on every render instead of once.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     useEffect(() => {
@@ -440,23 +466,11 @@ export default function HomeFeed() {
             }
         };
         applyFilter();
+        // animateContent depends on Motion's scale, so listing it here would
+        // re-run this data reload on every Motion-preference change too, not
+        // just on an actual filter change.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [filter, loadByFilter]);
-
-    const EmptyState = () => (
-        <ReAnimated.View
-            entering={withMotion(scale, () => FadeIn.duration(scaleMs(scale, 500)))}
-            style={empty_styles.container}
-        >
-            <Text style={empty_styles.title}>
-                {searchOpen && searchQuery.length > 0 ? 'No results' : 'No articles yet'}
-            </Text>
-            <Text style={empty_styles.subtitle}>
-                {searchOpen && searchQuery.length > 0
-                    ? 'Try different keywords.'
-                    : 'Pull down to refresh.'}
-            </Text>
-        </ReAnimated.View>
-    );
 
     return (
         <SafeAreaProvider>
@@ -550,7 +564,13 @@ export default function HomeFeed() {
                                 }
                                 bounces={true}
                                 alwaysBounceVertical={true}
-                                ListEmptyComponent={<EmptyState />}
+                                ListEmptyComponent={
+                                    <FeedEmptyState
+                                        scale={scale}
+                                        styles={empty_styles}
+                                        isSearching={searchOpen}
+                                    />
+                                }
                                 renderItem={({ item, index }) => (
                                     <NewsCard
                                         title={item.title}

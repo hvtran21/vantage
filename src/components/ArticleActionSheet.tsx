@@ -42,7 +42,7 @@ import { useAuth } from '@clerk/expo';
 import Article from '@/lib/constants';
 import { domainForArticle } from '@/lib/domain';
 import { blockSource, reportSource } from '@/lib/sources';
-import { getTopicColor, useTheme, type Theme } from '@/components/Theme';
+import { useTheme, type Theme } from '@/components/Theme';
 import { useMotion } from '@/components/Motion';
 import { useHaptics } from '@/components/Haptics';
 import { scaleMs, scaleSpring } from '@/lib/motion';

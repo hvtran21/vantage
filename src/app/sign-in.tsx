@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     View,
     Text,
@@ -86,7 +86,7 @@ export default function SignInPage() {
         setPendingVerification(true);
     };
 
-    const handleVerifyCode = async () => {
+    const handleVerifyCode = useCallback(async () => {
         setErrorMessage(null);
         setSubmitting(true);
         const { error } =
@@ -95,7 +95,7 @@ export default function SignInPage() {
                 : await signUp.verifications.verifyEmailCode({ code });
         setSubmitting(false);
         if (error) setErrorMessage(error.message ?? 'Invalid code');
-    };
+    }, [mode, code, signIn, signUp]);
 
     // Auto-submits once the code reaches full length, keyed by the code value
     // itself (not `submitting`) so a failed attempt doesn't retry in a loop --
@@ -110,7 +110,7 @@ export default function SignInPage() {
             autoSubmittedCode.current = code;
             handleVerifyCode();
         }
-    }, [code, pendingVerification]);
+    }, [code, pendingVerification, handleVerifyCode]);
 
     const handleSkip = async () => {
         haptics.light();

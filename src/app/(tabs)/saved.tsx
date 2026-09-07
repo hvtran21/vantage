@@ -17,6 +17,29 @@ import { scaleMs, withMotion } from '@/lib/motion';
 import { useTabBarScroll } from '@/components/TabBarScroll';
 import Animated, { FadeIn } from 'react-native-reanimated';
 
+function SavedEmptyState({
+    scale,
+    styles,
+}: {
+    scale: number;
+    styles: ReturnType<typeof makeStyles>;
+}) {
+    return (
+        <Animated.View
+            entering={withMotion(scale, () => FadeIn.duration(scaleMs(scale, 500)))}
+            style={styles.empty_container}
+        >
+            <View style={styles.empty_icon_circle}>
+                <FontAwesomeIcon icon={faBookmark} size={28} color="white" style={{ opacity: 0.12 }} />
+            </View>
+            <Text style={styles.empty_title}>Nothing saved yet</Text>
+            <Text style={styles.empty_subtitle}>
+                Tap the bookmark on any article to save it for later.
+            </Text>
+        </Animated.View>
+    );
+}
+
 export default function SavedScreen() {
     const [savedArticles, setSavedArticles] = useState<Article[]>([]);
     const actionSheet = useActionSheet();
@@ -74,26 +97,6 @@ export default function SavedScreen() {
         [savedArticles, actionSheet, getToken],
     );
 
-    const EmptyState = () => (
-        <Animated.View
-            entering={withMotion(scale, () => FadeIn.duration(scaleMs(scale, 500)))}
-            style={styles.empty_container}
-        >
-            <View style={styles.empty_icon_circle}>
-                <FontAwesomeIcon
-                    icon={faBookmark}
-                    size={28}
-                    color="white"
-                    style={{ opacity: 0.12 }}
-                />
-            </View>
-            <Text style={styles.empty_title}>Nothing saved yet</Text>
-            <Text style={styles.empty_subtitle}>
-                Tap the bookmark on any article to save it for later.
-            </Text>
-        </Animated.View>
-    );
-
     return (
         <SafeAreaProvider>
             <SafeAreaView style={styles.theme} edges={['top', 'left', 'right']}>
@@ -124,7 +127,7 @@ export default function SavedScreen() {
                               }
                             : { flexGrow: 1, paddingBottom: TAB_BAR_INSET }
                     }
-                    ListEmptyComponent={<EmptyState />}
+                    ListEmptyComponent={<SavedEmptyState scale={scale} styles={styles} />}
                     renderItem={({ item }) => (
                         <NewsCard
                             title={item.title}
