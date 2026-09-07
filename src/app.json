@@ -8,7 +8,6 @@
     "scheme": "vantage",
     "userInterfaceStyle": "automatic",
     "backgroundColor": "#050505",
-    "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.anonymous.vantage"
@@ -18,7 +17,6 @@
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#050505"
       },
-      "edgeToEdgeEnabled": true,
       "backgroundColor": "#050505",
       "package": "com.anonymous.vantage"
     },
