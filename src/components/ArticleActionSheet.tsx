@@ -44,6 +44,7 @@ import { domainForArticle } from '@/lib/domain';
 import { blockSource, reportSource } from '@/lib/sources';
 import { getTopicColor, useTheme, type Theme } from '@/components/Theme';
 import { useMotion } from '@/components/Motion';
+import { useHaptics } from '@/components/Haptics';
 import { scaleMs, scaleSpring } from '@/lib/motion';
 
 const POPOVER_WIDTH = 232;
@@ -155,6 +156,7 @@ export function ActionSheetProvider({ children }: { children: ReactNode }) {
     const [position, setPosition] = useState<Position | null>(null);
     const insets = useSafeAreaInsets();
     const { scale } = useMotion();
+    const haptics = useHaptics();
     const { isSignedIn, getToken } = useAuth();
     const theme = useTheme();
     const styles = useMemo(() => makeStyles(theme), [theme]);
@@ -258,6 +260,7 @@ export function ActionSheetProvider({ children }: { children: ReactNode }) {
                     label={saved ? 'Unsave' : 'Save'}
                     tone={saved ? 'active' : 'default'}
                     onPress={() => {
+                        haptics.medium();
                         const next = !saved;
                         setSaved(next);
                         request.onToggleSave(next);
@@ -268,6 +271,7 @@ export function ActionSheetProvider({ children }: { children: ReactNode }) {
                     icon={faUpRightFromSquare}
                     label="Open in browser"
                     onPress={() => {
+                        haptics.light();
                         request.onOpenInBrowser();
                         close();
                     }}
@@ -277,6 +281,7 @@ export function ActionSheetProvider({ children }: { children: ReactNode }) {
                         icon={faBan}
                         label={`Block ${domain}`}
                         onPress={() => {
+                            haptics.warning();
                             handleBlock(domain);
                             close();
                         }}
@@ -293,6 +298,7 @@ export function ActionSheetProvider({ children }: { children: ReactNode }) {
                             label={`Report ${domain}`}
                             tone="danger"
                             onPress={() => {
+                                haptics.warning();
                                 handleReport(domain);
                                 close();
                             }}

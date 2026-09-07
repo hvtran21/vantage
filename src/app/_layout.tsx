@@ -9,6 +9,7 @@ import { ActionSheetProvider } from '@/components/ArticleActionSheet';
 import { FeedOptionsProvider } from '@/components/FeedOptionsSheet';
 import { PrincipalSync } from '@/components/PrincipalSync';
 import { MotionProvider, useMotion } from '@/components/Motion';
+import { HapticsProvider } from '@/components/Haptics';
 import { ThemeProvider, useTheme } from '@/components/Theme';
 
 const publishableKey = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY!;
@@ -58,11 +59,13 @@ export default function RootLayout() {
                     <SafeAreaProvider>
                         <ThemeProvider>
                             <MotionProvider>
-                                <ActionSheetProvider>
-                                    <FeedOptionsProvider>
-                                        <AppNavigator />
-                                    </FeedOptionsProvider>
-                                </ActionSheetProvider>
+                                <HapticsProvider>
+                                    <ActionSheetProvider>
+                                        <FeedOptionsProvider>
+                                            <AppNavigator />
+                                        </FeedOptionsProvider>
+                                    </ActionSheetProvider>
+                                </HapticsProvider>
                             </MotionProvider>
                         </ThemeProvider>
                     </SafeAreaProvider>

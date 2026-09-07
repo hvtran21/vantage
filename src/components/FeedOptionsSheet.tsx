@@ -31,6 +31,7 @@ import {
 } from '@fortawesome/free-solid-svg-icons';
 import { useTheme, useThemeMode, type Theme, type ThemeMode } from '@/components/Theme';
 import { useMotion } from '@/components/Motion';
+import { useHaptics } from '@/components/Haptics';
 import { scaleMs, scaleSpring } from '@/lib/motion';
 import { getLastQueryTime } from '@/lib/utilities';
 import { relativeTime } from '@/components/NewsCard';
@@ -116,6 +117,7 @@ export function FeedOptionsProvider({ children }: { children: ReactNode }) {
     const theme = useTheme();
     const { mode, setMode } = useThemeMode();
     const { scale } = useMotion();
+    const haptics = useHaptics();
     const styles = useMemo(() => makeStyles(theme), [theme]);
     const [refreshHint, setRefreshHint] = useState('');
 
@@ -200,6 +202,7 @@ export function FeedOptionsProvider({ children }: { children: ReactNode }) {
                                     hint={option.hint}
                                     selected={request.filter === option.key}
                                     onPress={() => {
+                                        haptics.selection();
                                         request.onSelectFilter(option.key);
                                         close();
                                     }}
@@ -212,7 +215,10 @@ export function FeedOptionsProvider({ children }: { children: ReactNode }) {
                                 {APPEARANCE_OPTIONS.map((option) => (
                                     <Pressable
                                         key={option.key}
-                                        onPress={() => setMode(option.key)}
+                                        onPress={() => {
+                                            haptics.selection();
+                                            setMode(option.key);
+                                        }}
                                         style={[styles.seg, mode === option.key && styles.seg_on]}
                                     >
                                         <Text
@@ -234,6 +240,7 @@ export function FeedOptionsProvider({ children }: { children: ReactNode }) {
                                 icon={faBan}
                                 name="Blocked sources"
                                 onPress={() => {
+                                    haptics.light();
                                     close();
                                     request.onBlockedSourcesPress();
                                 }}
@@ -245,6 +252,7 @@ export function FeedOptionsProvider({ children }: { children: ReactNode }) {
                                 name="Refresh now"
                                 hint={refreshHint}
                                 onPress={() => {
+                                    haptics.light();
                                     close();
                                     request.onRefreshPress();
                                 }}

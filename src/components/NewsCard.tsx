@@ -7,6 +7,7 @@ import { router } from 'expo-router';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import { getTopicColor, useTheme, type Theme } from '@/components/Theme';
 import { useMotion } from '@/components/Motion';
+import { useHaptics } from '@/components/Haptics';
 import { scaleMs, withMotion } from '@/lib/motion';
 import { domainForArticle } from '@/lib/domain';
 import { getPublisherLabel } from '@/lib/publishers';
@@ -158,8 +159,10 @@ function EllipsisButton({
     onPress: (anchor: AnchorRect) => void;
 }) {
     const ref = useRef<ElementRef<typeof TouchableOpacity>>(null);
+    const haptics = useHaptics();
 
     const handlePress = () => {
+        haptics.light();
         // The menu anchors to wherever this button actually is on screen, not a
         // fixed spot, so it has to ask the native view for its own position.
         ref.current?.measureInWindow((x: number, y: number, width: number, height: number) => {
@@ -193,6 +196,7 @@ export const NewsCard = ({
 }: CardFrontProps) => {
     const [imageError, setImageError] = useState(false);
     const { scale } = useMotion();
+    const haptics = useHaptics();
     const theme = useTheme();
     const styles = useMemo(() => makeCardStyle(theme), [theme]);
 
@@ -208,6 +212,7 @@ export const NewsCard = ({
     }, [url_to_image]);
 
     const handleCardPress = () => {
+        haptics.light();
         router.push({ pathname: '/article/[id]', params: { id } });
     };
 

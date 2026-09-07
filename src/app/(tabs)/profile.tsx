@@ -1,5 +1,5 @@
 import { useState, useCallback, useMemo, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Switch } from 'react-native';
 import { SafeAreaView, SafeAreaProvider } from 'react-native-safe-area-context';
 import { useFocusEffect, router } from 'expo-router';
 import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
@@ -18,7 +18,9 @@ import {
 import { getInterests, addInterest, removeInterest, syncInterests } from '@/lib/interests';
 import { useMotion } from '@/components/Motion';
 import { scaleMs, withMotion, type MotionPreference } from '@/lib/motion';
+import { useHaptics } from '@/components/Haptics';
 import { useTabBarScroll } from '@/components/TabBarScroll';
+import * as ExpoHaptics from 'expo-haptics';
 import Animated, { FadeIn } from 'react-native-reanimated';
 
 const genreOptions = [
@@ -44,6 +46,7 @@ function GenrePreferences() {
     const [loaded, setLoaded] = useState(false);
     const { isSignedIn, getToken } = useAuth();
     const { scale } = useMotion();
+    const haptics = useHaptics();
     const theme = useTheme();
     const styles = useMemo(() => makeStyles(theme), [theme]);
 
@@ -69,6 +72,7 @@ function GenrePreferences() {
     );
 
     const toggle = async (genre: string) => {
+        haptics.selection();
         const adding = !selected.includes(genre);
         setSelected((prev) => (adding ? [...prev, genre] : prev.filter((g) => g !== genre)));
 
@@ -153,6 +157,7 @@ const MOTION_OPTIONS: { value: MotionPreference; label: string }[] = [
 
 function MotionPreferences() {
     const { preference, setPreference } = useMotion();
+    const haptics = useHaptics();
     const theme = useTheme();
     const styles = useMemo(() => makeStyles(theme), [theme]);
     return (
@@ -165,7 +170,10 @@ function MotionPreferences() {
                     return (
                         <TouchableOpacity
                             key={option.value}
-                            onPress={() => setPreference(option.value)}
+                            onPress={() => {
+                                haptics.selection();
+                                setPreference(option.value);
+                            }}
                             activeOpacity={0.7}
                             style={[styles.motion_option, active && styles.motion_option_active]}
                         >
@@ -180,6 +188,33 @@ function MotionPreferences() {
                         </TouchableOpacity>
                     );
                 })}
+            </View>
+        </View>
+    );
+}
+
+function HapticsPreferences() {
+    const { enabled, setEnabled } = useHaptics();
+    const theme = useTheme();
+    const styles = useMemo(() => makeStyles(theme), [theme]);
+
+    const toggle = (next: boolean) => {
+        setEnabled(next);
+        // Bypasses the enabled gate deliberately -- turning it on should
+        // always be confirmed by the very thing you just turned on.
+        if (next) ExpoHaptics.impactAsync(ExpoHaptics.ImpactFeedbackStyle.Light).catch(() => {});
+    };
+
+    return (
+        <View style={styles.section}>
+            <View style={styles.motion_row}>
+                <View style={{ flex: 1 }}>
+                    <Text style={styles.section_label}>HAPTICS</Text>
+                    <Text style={[styles.section_hint, { marginBottom: 0 }]}>
+                        Feel a light tap on taps, saves, and toggles.
+                    </Text>
+                </View>
+                <Switch value={enabled} onValueChange={toggle} />
             </View>
         </View>
     );
@@ -228,6 +263,7 @@ function ProfileCard({
 // section would show the same domain twice.
 function BlockedSources() {
     const { isSignedIn, getToken } = useAuth();
+    const haptics = useHaptics();
     const theme = useTheme();
     const styles = useMemo(() => makeStyles(theme), [theme]);
     const [sources, setSources] = useState<BlockedSource[]>([]);
@@ -268,6 +304,7 @@ function BlockedSources() {
 
     const handleUnblock = useCallback(
         (domain: string) => {
+            haptics.light();
             // Drop it optimistically, but put it back if the server refused --
             // otherwise the next sync silently reinstates it with no explanation.
             setSources((prev) => prev.filter((item) => item.source_domain !== domain));
@@ -278,7 +315,7 @@ function BlockedSources() {
                 }
             })().catch((error) => console.warn('[profile] unblock failed:', error));
         },
-        [isSignedIn, getToken],
+        [isSignedIn, getToken, haptics],
     );
 
     return (
@@ -330,17 +367,20 @@ export default function ProfileScreen() {
     const { user } = useUser();
     const { signOut } = useAuth();
     const { onScroll: tabBarOnScroll } = useTabBarScroll();
+    const haptics = useHaptics();
     const theme = useTheme();
     const styles = useMemo(() => makeStyles(theme), [theme]);
     const isSignedIn = !!user;
 
     const handleSignOut = async () => {
+        haptics.light();
         await signOut();
         await AsyncStorage.removeItem('skippedAuth');
         router.replace('/sign-in');
     };
 
     const handleSignIn = () => {
+        haptics.light();
         router.push('/sign-in');
     };
 
@@ -396,6 +436,8 @@ export default function ProfileScreen() {
                     </View>
 
                     <MotionPreferences />
+
+                    <HapticsPreferences />
 
                     <BlockedSources />
 

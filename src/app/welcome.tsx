@@ -10,6 +10,7 @@ import { initializeDatabase } from '@/lib/database';
 import { addInterest } from '@/lib/interests';
 import { getTopicColor, useTheme, type Theme } from '@/components/Theme';
 import { useMotion } from '@/components/Motion';
+import { useHaptics } from '@/components/Haptics';
 import { scaleMs, withMotion } from '@/lib/motion';
 
 enum options {
@@ -35,9 +36,11 @@ export default function WelcomePage() {
     const insets = useSafeAreaInsets();
     const { scale } = useMotion();
     const theme = useTheme();
+    const haptics = useHaptics();
     const welcomeStyles = useMemo(() => makeWelcomeStyles(theme), [theme]);
 
     const toggleGenre = (genre: string) => {
+        haptics.selection();
         setUserGenreSelection((prev) => {
             if (prev.includes(genre)) {
                 return prev.filter((g) => g !== genre);
@@ -51,6 +54,7 @@ export default function WelcomePage() {
     }, []);
 
     const handleSubmit = async () => {
+        haptics.light();
         // No token yet -- goes through under the device's anon principal, same as
         // any other pre-sign-in preference, and link-anon folds it in on sign-in.
         for (const genre of userGenreSelection) {

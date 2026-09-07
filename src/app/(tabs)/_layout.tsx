@@ -23,6 +23,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme, type Theme } from '@/components/Theme';
+import { useHaptics } from '@/components/Haptics';
 import { TabBarScrollProvider, useTabBarScroll } from '@/components/TabBarScroll';
 
 const INDICATOR_INSET = 6;
@@ -53,6 +54,7 @@ function CustomTabBar({ state, descriptors, navigation }: CustomTabBarProps) {
     const indicatorX = useSharedValue(0);
     const lastItemWidth = useRef(0);
     const { collapse } = useTabBarScroll();
+    const haptics = useHaptics();
 
     useEffect(() => {
         if (!itemWidth) return;
@@ -138,6 +140,7 @@ function CustomTabBar({ state, descriptors, navigation }: CustomTabBarProps) {
                             canPreventDefault: true,
                         });
                         if (!focused && !event.defaultPrevented) {
+                            haptics.selection();
                             navigation.navigate(route.name);
                         }
                     };

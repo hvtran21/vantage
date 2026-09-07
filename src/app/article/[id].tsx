@@ -34,6 +34,7 @@ import { stripHtml } from '@/lib/utilities';
 import { domainForArticle } from '@/lib/domain';
 import { getPublisherLabel } from '@/lib/publishers';
 import { useMotion } from '@/components/Motion';
+import { useHaptics } from '@/components/Haptics';
 import { scaleMs, withMotion } from '@/lib/motion';
 import Animated, { FadeIn, FadeInDown, FadeInUp } from 'react-native-reanimated';
 
@@ -57,6 +58,7 @@ export default function ArticleDetail() {
     const pendingBrowserUrl = useRef<string | null>(null);
     const insets = useSafeAreaInsets();
     const { scale } = useMotion();
+    const haptics = useHaptics();
     const { getToken } = useAuth();
     const theme = useTheme();
     const styles = useMemo(() => makeStyles(theme), [theme]);
@@ -77,6 +79,7 @@ export default function ArticleDetail() {
 
     const handleSave = async () => {
         if (!article) return;
+        haptics.medium();
         const next = !saved;
         // Flip optimistically; saveArticle/unsaveArticle write straight to
         // SQLite themselves and unsaveArticle already rolls back on failure.
@@ -107,6 +110,7 @@ export default function ArticleDetail() {
 
     const handleConfirmOpenInBrowser = () => {
         if (!article) return;
+        haptics.light();
         pendingBrowserUrl.current = article.url;
         setShowBrowserModal(false);
         if (Platform.OS === 'android') {
@@ -178,7 +182,10 @@ export default function ArticleDetail() {
                             <>
                                 <Text style={styles.meta_dot}> </Text>
                                 <TouchableOpacity
-                                    onPress={() => setShowSourceInfoModal(true)}
+                                    onPress={() => {
+                                        haptics.light();
+                                        setShowSourceInfoModal(true);
+                                    }}
                                     hitSlop={8}
                                     style={styles.source_touch}
                                 >
@@ -245,7 +252,10 @@ export default function ArticleDetail() {
                     >
                         <TouchableOpacity
                             style={styles.browser_button}
-                            onPress={() => setShowBrowserModal(true)}
+                            onPress={() => {
+                                haptics.light();
+                                setShowBrowserModal(true);
+                            }}
                             activeOpacity={0.8}
                         >
                             <FontAwesomeIcon
@@ -274,7 +284,10 @@ export default function ArticleDetail() {
                     style={[styles.nav_overlay, { paddingTop: insets.top + 12 }]}
                 >
                     <TouchableOpacity
-                        onPress={() => router.back()}
+                        onPress={() => {
+                            haptics.light();
+                            router.back();
+                        }}
                         hitSlop={10}
                         style={styles.nav_btn}
                     >
@@ -340,7 +353,10 @@ export default function ArticleDetail() {
                             <View style={styles.modal_actions}>
                                 <TouchableOpacity
                                     style={[styles.modal_button, styles.modal_button_secondary]}
-                                    onPress={() => setShowBrowserModal(false)}
+                                    onPress={() => {
+                                        haptics.light();
+                                        setShowBrowserModal(false);
+                                    }}
                                     activeOpacity={0.8}
                                 >
                                     <Text style={styles.modal_button_secondary_text}>Cancel</Text>

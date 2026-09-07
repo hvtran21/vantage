@@ -17,6 +17,7 @@ import { useSignIn, useSignUp } from '@clerk/expo';
 import { LinearGradient } from 'expo-linear-gradient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme, type Theme } from '@/components/Theme';
+import { useHaptics } from '@/components/Haptics';
 
 type Mode = 'sign-in' | 'sign-up';
 
@@ -25,6 +26,7 @@ const CODE_LENGTH = 6;
 
 export default function SignInPage() {
     const theme = useTheme();
+    const haptics = useHaptics();
     const styles = useMemo(() => makeStyles(theme), [theme]);
     const [mode, setMode] = useState<Mode>('sign-in');
     const [emailAddress, setEmailAddress] = useState('');
@@ -112,6 +114,7 @@ export default function SignInPage() {
     }, [code, pendingVerification]);
 
     const handleSkip = async () => {
+        haptics.light();
         await AsyncStorage.setItem('skippedAuth', 'true');
         router.replace('/(tabs)');
     };
@@ -166,7 +169,10 @@ export default function SignInPage() {
                             {errorMessage && <Text style={styles.error}>{errorMessage}</Text>}
 
                             <TouchableOpacity
-                                onPress={pendingVerification ? handleVerifyCode : handleSendCode}
+                                onPress={() => {
+                                    haptics.light();
+                                    (pendingVerification ? handleVerifyCode : handleSendCode)();
+                                }}
                                 activeOpacity={0.8}
                                 disabled={submitting}
                                 style={styles.submit_button}
@@ -189,9 +195,10 @@ export default function SignInPage() {
 
                             {!pendingVerification && (
                                 <TouchableOpacity
-                                    onPress={() =>
-                                        switchMode(mode === 'sign-in' ? 'sign-up' : 'sign-in')
-                                    }
+                                    onPress={() => {
+                                        haptics.selection();
+                                        switchMode(mode === 'sign-in' ? 'sign-up' : 'sign-in');
+                                    }}
                                     style={styles.toggle}
                                 >
                                     <Text style={styles.toggle_text}>
