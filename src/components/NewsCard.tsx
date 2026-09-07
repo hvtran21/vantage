@@ -415,13 +415,21 @@ const makeCardStyle = (theme: Theme) =>
             right: 12,
             zIndex: 1,
         },
+        // Matches `card`'s own borderRadius: `card`'s overflow:hidden clips
+        // plain Views reliably, but not always expo-image's native view once
+        // elevation is in play, so the top corners are rounded here too.
         lead_photo_frame: {
             width: '100%',
             height: 168,
+            borderTopLeftRadius: 20,
+            borderTopRightRadius: 20,
+            overflow: 'hidden',
         },
         lead_photo: {
             width: '100%',
             height: '100%',
+            borderTopLeftRadius: 20,
+            borderTopRightRadius: 20,
         },
         lead_body: {
             paddingTop: 14,
