@@ -307,7 +307,7 @@ export default function ArticleDetail() {
                             >
                                 <FontAwesomeIcon
                                     icon={faXmark}
-                                    size={13}
+                                    size={14}
                                     color={theme.text_secondary}
                                 />
                             </TouchableOpacity>
@@ -320,7 +320,7 @@ export default function ArticleDetail() {
                                 <View style={styles.modal_icon_circle}>
                                     <FontAwesomeIcon
                                         icon={faUpRightFromSquare}
-                                        size={18}
+                                        size={22}
                                         color={theme.accent}
                                     />
                                 </View>
@@ -377,7 +377,7 @@ export default function ArticleDetail() {
                             >
                                 <FontAwesomeIcon
                                     icon={faXmark}
-                                    size={13}
+                                    size={14}
                                     color={theme.text_secondary}
                                 />
                             </TouchableOpacity>
@@ -385,7 +385,7 @@ export default function ArticleDetail() {
                             <View style={styles.modal_icon_circle}>
                                 <FontAwesomeIcon
                                     icon={publisher?.known ? faCheck : faGlobe}
-                                    size={18}
+                                    size={22}
                                     color={theme.accent}
                                 />
                             </View>
