@@ -242,7 +242,7 @@ const makeStyles = (theme: Theme) =>
         },
         title: {
             fontFamily: 'WorkSans-Bold',
-            color: 'white',
+            color: theme.text,
             fontSize: 32,
             letterSpacing: -0.5,
             marginBottom: 24,

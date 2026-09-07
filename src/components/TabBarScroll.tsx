@@ -1,6 +1,8 @@
 import { createContext, useContext, useMemo, useRef, type ReactNode } from 'react';
 import type { NativeScrollEvent, NativeSyntheticEvent } from 'react-native';
 import { useSharedValue, withSpring, type SharedValue } from 'react-native-reanimated';
+import { useMotion } from '@/components/Motion';
+import { scaleSpring } from '@/lib/motion';
 
 const COLLAPSE_SPRING = { damping: 22, stiffness: 210, mass: 0.7 };
 
@@ -24,9 +26,17 @@ export function TabBarScrollProvider({ children }: { children: ReactNode }) {
     const collapse = useSharedValue(0);
     const lastY = useRef(0);
     const accumulated = useRef(0);
+    const { scale } = useMotion();
 
-    const api = useMemo<TabBarScrollApi>(
-        () => ({
+    const api = useMemo<TabBarScrollApi>(() => {
+        // Motion "off" (scale 0) would divide COLLAPSE_SPRING's stiffness and
+        // damping by zero -- jump straight to the target instead of animating.
+        const setCollapse = (value: number) => {
+            collapse.value =
+                scale === 0 ? value : withSpring(value, scaleSpring(scale, COLLAPSE_SPRING));
+        };
+
+        return {
             collapse,
             onScroll: (event) => {
                 const y = event.nativeEvent.contentOffset.y;
@@ -36,7 +46,7 @@ export function TabBarScrollProvider({ children }: { children: ReactNode }) {
                 // Always expanded near the top -- nothing to shrink away from
                 // yet, and it shouldn't still be collapsed once you're back.
                 if (y < 24) {
-                    if (collapse.value !== 0) collapse.value = withSpring(0, COLLAPSE_SPRING);
+                    if (collapse.value !== 0) setCollapse(0);
                     accumulated.current = 0;
                     return;
                 }
@@ -48,16 +58,15 @@ export function TabBarScrollProvider({ children }: { children: ReactNode }) {
 
                 accumulated.current += delta;
                 if (accumulated.current > THRESHOLD) {
-                    collapse.value = withSpring(1, COLLAPSE_SPRING);
+                    setCollapse(1);
                     accumulated.current = 0;
                 } else if (accumulated.current < -THRESHOLD) {
-                    collapse.value = withSpring(0, COLLAPSE_SPRING);
+                    setCollapse(0);
                     accumulated.current = 0;
                 }
             },
-        }),
-        [collapse],
-    );
+        };
+    }, [collapse, scale]);
 
     return <TabBarScrollContext.Provider value={api}>{children}</TabBarScrollContext.Provider>;
 }

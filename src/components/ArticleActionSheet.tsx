@@ -15,8 +15,8 @@ import {
     TouchableOpacity,
     Pressable,
     BackHandler,
-    Dimensions,
     Platform,
+    useWindowDimensions,
     type LayoutChangeEvent,
 } from 'react-native';
 import Animated, {
@@ -51,7 +51,6 @@ const POPOVER_WIDTH = 232;
 const GAP = 8;
 const MARGIN = 12;
 const POP = { damping: 20, stiffness: 300, mass: 0.5 };
-const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 /** Where the ellipsis that opened the menu actually sits, from measureInWindow. */
 export type AnchorRect = { x: number; y: number; width: number; height: number };
@@ -122,6 +121,8 @@ function computePosition(
     anchor: AnchorRect,
     menuHeight: number,
     insets: { top: number; bottom: number },
+    screenWidth: number,
+    screenHeight: number,
 ): Position {
     // On Android, measureInWindow reports y within the safe-content area
     // (below the status bar), but this overlay positions itself from the true
@@ -132,14 +133,18 @@ function computePosition(
     const anchorTop = anchor.y + (Platform.OS === 'android' ? insets.top : 0);
 
     let left = anchor.x + anchor.width - POPOVER_WIDTH;
-    left = Math.min(Math.max(left, MARGIN), SCREEN_WIDTH - POPOVER_WIDTH - MARGIN);
+    left = Math.min(Math.max(left, MARGIN), screenWidth - POPOVER_WIDTH - MARGIN);
 
     const bottomObstruction = insets.bottom + TAB_BAR_ZONE + MARGIN;
-    const spaceBelow = SCREEN_HEIGHT - bottomObstruction - (anchorTop + anchor.height + GAP);
+    const spaceBelow = screenHeight - bottomObstruction - (anchorTop + anchor.height + GAP);
     const opensUpward = spaceBelow < menuHeight;
     const top = opensUpward ? anchorTop - GAP - menuHeight : anchorTop + anchor.height + GAP;
 
-    return { top: Math.max(top, insets.top + MARGIN), left };
+    // Clamped both ways: a menu taller than the space it opened into (either
+    // direction) would otherwise spill past the opposite edge of the screen.
+    const minTop = insets.top + MARGIN;
+    const maxTop = Math.max(screenHeight - bottomObstruction - menuHeight, minTop);
+    return { top: Math.min(Math.max(top, minTop), maxTop), left };
 }
 
 // Hosted at the root rather than in a react-native Modal: Modal builds a native
@@ -155,6 +160,7 @@ export function ActionSheetProvider({ children }: { children: ReactNode }) {
     const [saved, setSaved] = useState(false);
     const [position, setPosition] = useState<Position | null>(null);
     const insets = useSafeAreaInsets();
+    const { width: screenWidth, height: screenHeight } = useWindowDimensions();
     const { scale } = useMotion();
     const haptics = useHaptics();
     const { isSignedIn, getToken } = useAuth();
@@ -209,10 +215,18 @@ export function ActionSheetProvider({ children }: { children: ReactNode }) {
     const onMeasured = useCallback(
         (event: LayoutChangeEvent) => {
             if (!request) return;
-            setPosition(computePosition(request.anchor, event.nativeEvent.layout.height, insets));
+            setPosition(
+                computePosition(
+                    request.anchor,
+                    event.nativeEvent.layout.height,
+                    insets,
+                    screenWidth,
+                    screenHeight,
+                ),
+            );
             progress.value = scale === 0 ? 1 : withSpring(1, scaleSpring(scale, POP));
         },
-        [request, insets, scale, progress],
+        [request, insets, scale, progress, screenWidth, screenHeight],
     );
 
     const animatedStyle = useAnimatedStyle(() => ({
@@ -392,7 +406,7 @@ const makeStyles = (theme: Theme) =>
             backgroundColor: theme.accent_soft,
         },
         icon_chip_danger: {
-            backgroundColor: 'rgba(239, 68, 68, 0.10)',
+            backgroundColor: theme.danger_soft,
         },
         row_label: {
             fontFamily: 'WorkSans-Regular',

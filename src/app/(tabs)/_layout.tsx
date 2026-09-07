@@ -24,6 +24,8 @@ import Animated, {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme, type Theme } from '@/components/Theme';
 import { useHaptics } from '@/components/Haptics';
+import { useMotion } from '@/components/Motion';
+import { scaleMs, scaleSpring } from '@/lib/motion';
 import { TabBarScrollProvider, useTabBarScroll } from '@/components/TabBarScroll';
 
 const INDICATOR_INSET = 6;
@@ -55,6 +57,7 @@ function CustomTabBar({ state, descriptors, navigation }: CustomTabBarProps) {
     const lastItemWidth = useRef(0);
     const { collapse } = useTabBarScroll();
     const haptics = useHaptics();
+    const { scale } = useMotion();
 
     useEffect(() => {
         if (!itemWidth) return;
@@ -62,15 +65,18 @@ function CustomTabBar({ state, descriptors, navigation }: CustomTabBarProps) {
         const target = state.index * itemWidth * (I18nManager.isRTL ? -1 : 1);
         const resized = lastItemWidth.current !== itemWidth;
         lastItemWidth.current = itemWidth;
-        indicatorX.value = resized ? target : withSpring(target, SLIDE);
-    }, [state.index, itemWidth, indicatorX]);
+        // Motion "off" would divide SLIDE's stiffness/damping by zero -- jump
+        // straight to the target instead of animating, same as a resize.
+        indicatorX.value =
+            resized || scale === 0 ? target : withSpring(target, scaleSpring(scale, SLIDE));
+    }, [state.index, itemWidth, indicatorX, scale]);
 
     // A tab switch always lands back at full size -- the screen you just
     // left being scrolled down shouldn't leave the bar shrunk on the one you
     // switched to.
     useEffect(() => {
-        collapse.value = withTiming(0, { duration: 200 });
-    }, [state.index, collapse]);
+        collapse.value = withTiming(0, { duration: scaleMs(scale, 200) });
+    }, [state.index, collapse, scale]);
 
     const indicatorStyle = useAnimatedStyle(() => ({
         transform: [{ translateX: indicatorX.value }],

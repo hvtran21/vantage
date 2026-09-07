@@ -304,7 +304,9 @@ function BlockedSources() {
 
     const handleUnblock = useCallback(
         (domain: string) => {
-            haptics.light();
+            // Matches Block/Report's weight -- Save/Unsave use the same weight
+            // in both directions of their own toggle, so this should too.
+            haptics.warning();
             // Drop it optimistically, but put it back if the server refused --
             // otherwise the next sync silently reinstates it with no explanation.
             setSources((prev) => prev.filter((item) => item.source_domain !== domain));
@@ -527,7 +529,7 @@ const makeStyles = (theme: Theme) =>
             color: theme.text,
         },
         reported_badge: {
-            backgroundColor: 'rgba(239, 68, 68, 0.10)',
+            backgroundColor: theme.danger_soft,
             borderRadius: 4,
             paddingHorizontal: 6,
             paddingVertical: 2,

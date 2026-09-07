@@ -117,12 +117,12 @@ export default function HomeFeed() {
                 setShowScrollTop(shouldShow);
                 Animated.timing(scrollTopAnim, {
                     toValue: shouldShow ? 1 : 0,
-                    duration: 200,
+                    duration: scaleMs(scale, 200),
                     useNativeDriver: true,
                 }).start();
             }
         },
-        [showScrollTop, scrollTopAnim, tabBarOnScroll],
+        [showScrollTop, scrollTopAnim, tabBarOnScroll, scale],
     );
 
     const scrollToTop = useCallback(() => {
@@ -244,14 +244,19 @@ export default function HomeFeed() {
                 anchor,
                 onToggleSave: async (next) => {
                     const token = (await getToken()) ?? undefined;
+                    // unsaveArticle rolls the SQLite row back to saved=1 on failure
+                    // and reports whether it stuck -- the list has to check that
+                    // instead of trusting the optimistic value it was passed.
+                    let finalSaved = next;
                     if (next) {
                         await saveArticle(article.id, token);
                     } else {
-                        await unsaveArticle(article.id, token);
+                        const unsaveStuck = await unsaveArticle(article.id, token);
+                        finalSaved = !unsaveStuck;
                     }
                     setArticles((prev) =>
                         prev.map((item) =>
-                            item.id === article.id ? { ...item, saved: next ? 1 : 0 } : item,
+                            item.id === article.id ? { ...item, saved: finalSaved ? 1 : 0 } : item,
                         ),
                     );
                 },
@@ -268,15 +273,12 @@ export default function HomeFeed() {
     );
 
     const animateContent = useCallback(() => {
+        const duration = scaleMs(scale, 350);
         Animated.parallel([
-            Animated.timing(fadeAnimArticles, { toValue: 1, duration: 350, useNativeDriver: true }),
-            Animated.timing(slideAnimArticles, {
-                toValue: 0,
-                duration: 350,
-                useNativeDriver: true,
-            }),
+            Animated.timing(fadeAnimArticles, { toValue: 1, duration, useNativeDriver: true }),
+            Animated.timing(slideAnimArticles, { toValue: 0, duration, useNativeDriver: true }),
         ]).start();
-    }, [fadeAnimArticles, slideAnimArticles]);
+    }, [fadeAnimArticles, slideAnimArticles, scale]);
 
     const resetContentAnim = useCallback(() => {
         fadeAnimArticles.setValue(0);
@@ -309,6 +311,7 @@ export default function HomeFeed() {
     );
 
     const handleSearchClear = useCallback(() => {
+        if (debounceTimer.current) clearTimeout(debounceTimer.current);
         setSearchQuery('');
         searchInputRef.current?.clear();
         Keyboard.dismiss();
@@ -558,7 +561,7 @@ export default function HomeFeed() {
                             activeOpacity={0.8}
                             style={fab_styles.button}
                         >
-                            <FontAwesomeIcon icon={faArrowUp} size={16} color="white" />
+                            <FontAwesomeIcon icon={faArrowUp} size={16} color={theme.on_accent} />
                         </TouchableOpacity>
                     </Animated.View>
                 </View>

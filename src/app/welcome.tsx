@@ -232,7 +232,7 @@ const makeWelcomeStyles = (theme: Theme) =>
         },
         main_title: {
             fontFamily: 'WorkSans-Bold',
-            color: 'white',
+            color: theme.text,
             fontSize: 52,
             lineHeight: 58,
             letterSpacing: -1.5,

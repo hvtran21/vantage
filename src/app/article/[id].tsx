@@ -81,15 +81,20 @@ export default function ArticleDetail() {
         if (!article) return;
         haptics.medium();
         const next = !saved;
-        // Flip optimistically; saveArticle/unsaveArticle write straight to
-        // SQLite themselves and unsaveArticle already rolls back on failure.
+        // Flip optimistically; saveArticle writes straight to SQLite and never
+        // rolls back. unsaveArticle can roll its row back to saved=1 on
+        // failure, so that outcome has to feed back into this screen's state.
         setArticle({ ...article, saved: next ? 1 : 0 });
         setSaved(next);
         const token = (await getToken()) ?? undefined;
         if (next) {
             await saveArticle(article.id, token);
         } else {
-            await unsaveArticle(article.id, token);
+            const unsaveStuck = await unsaveArticle(article.id, token);
+            if (!unsaveStuck) {
+                setArticle((prev) => (prev ? { ...prev, saved: 1 } : prev));
+                setSaved(true);
+            }
         }
     };
 
@@ -261,7 +266,7 @@ export default function ArticleDetail() {
                             <FontAwesomeIcon
                                 icon={faUpRightFromSquare}
                                 size={15}
-                                color="white"
+                                color={theme.on_accent}
                                 style={{ marginRight: 10 }}
                             />
                             <Text style={styles.browser_button_text}>Read full article</Text>
@@ -306,15 +311,18 @@ export default function ArticleDetail() {
                 <Modal
                     visible={showBrowserModal}
                     transparent
-                    animationType="fade"
+                    animationType={scale === 0 ? 'none' : 'fade'}
                     statusBarTranslucent
-                    onRequestClose={() => {}}
+                    onRequestClose={() => setShowBrowserModal(false)}
                     onDismiss={Platform.OS === 'ios' ? openPendingBrowser : undefined}
                 >
                     <View style={styles.modal_backdrop}>
                         <View style={styles.modal_card}>
                             <TouchableOpacity
-                                onPress={() => setShowBrowserModal(false)}
+                                onPress={() => {
+                                    haptics.light();
+                                    setShowBrowserModal(false);
+                                }}
                                 hitSlop={12}
                                 style={styles.modal_close_btn}
                             >
@@ -376,7 +384,7 @@ export default function ArticleDetail() {
                 <Modal
                     visible={showSourceInfoModal}
                     transparent
-                    animationType="fade"
+                    animationType={scale === 0 ? 'none' : 'fade'}
                     statusBarTranslucent
                     onRequestClose={() => setShowSourceInfoModal(false)}
                 >
@@ -387,7 +395,10 @@ export default function ArticleDetail() {
                     >
                         <TouchableOpacity activeOpacity={1} style={styles.modal_card}>
                             <TouchableOpacity
-                                onPress={() => setShowSourceInfoModal(false)}
+                                onPress={() => {
+                                    haptics.light();
+                                    setShowSourceInfoModal(false);
+                                }}
                                 hitSlop={12}
                                 style={styles.modal_close_btn}
                             >
@@ -549,7 +560,7 @@ const makeStyles = (theme: Theme) =>
         description: {
             fontFamily: 'WorkSans-Regular',
             fontSize: 17,
-            color: 'rgba(255, 255, 255, 0.72)',
+            color: theme.text_secondary,
             lineHeight: 27,
             marginTop: 10,
         },
@@ -572,7 +583,7 @@ const makeStyles = (theme: Theme) =>
         browser_button_text: {
             fontFamily: 'WorkSans-SemiBold',
             fontSize: 16,
-            color: 'white',
+            color: theme.on_accent,
         },
         modal_backdrop: {
             flex: 1,
@@ -677,6 +688,6 @@ const makeStyles = (theme: Theme) =>
         modal_button_primary_text: {
             fontFamily: 'WorkSans-SemiBold',
             fontSize: 15,
-            color: 'white',
+            color: theme.on_accent,
         },
     });
