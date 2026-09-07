@@ -127,12 +127,19 @@ export default function HomeFeed() {
         ],
     }));
 
+    // Plain JS function, not a worklet -- runOnJS needs a reference it can
+    // call back on the JS thread, not the Keyboard module itself, which
+    // can't be copied into the reaction's UI-thread closure below.
+    const dismissKeyboard = useCallback(() => {
+        Keyboard.dismiss();
+    }, []);
+
     // A collapse triggered while the search input is focused would otherwise
     // leave the keyboard open with nothing visible to type into.
     useAnimatedReaction(
         () => collapse.value > 0.5,
         (isCollapsed, wasCollapsed) => {
-            if (isCollapsed && !wasCollapsed) runOnJS(Keyboard.dismiss)();
+            if (isCollapsed && !wasCollapsed) runOnJS(dismissKeyboard)();
         },
     );
 
