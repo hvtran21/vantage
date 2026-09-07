@@ -40,9 +40,20 @@ import { deleteArticlesByAge, canRefreshArticles } from '@/lib/utilities';
 import { domainForArticle } from '@/lib/domain';
 import { useMotion } from '@/components/Motion';
 import { scaleMs, withMotion } from '@/lib/motion';
-import ReAnimated, { FadeIn } from 'react-native-reanimated';
+import ReAnimated, {
+    FadeIn,
+    Extrapolation,
+    interpolate,
+    runOnJS,
+    useAnimatedReaction,
+    useAnimatedStyle,
+} from 'react-native-reanimated';
 
 type NetworkScope = { key: string; genre?: string; category?: string };
+
+// Pills are 44 tall plus the row's own 12 of bottom padding -- the collapse
+// animation below interpolates the row's height down from this to 0.
+const CONTROLS_HEIGHT = 56;
 
 // Cursor pagination needs a single genre or category. CSV "Home" selections
 // keep the existing first-batch-only behavior.
@@ -104,7 +115,26 @@ export default function HomeFeed() {
     const [showScrollTop, setShowScrollTop] = useState(false);
     const scrollTopAnim = useRef(new Animated.Value(0)).current;
 
-    const { onScroll: tabBarOnScroll } = useTabBarScroll();
+    const { onScroll: tabBarOnScroll, collapse } = useTabBarScroll();
+
+    // Shares the tab bar's own collapse value, so the search row and the tab
+    // bar shrink away and reappear together on the same scroll gesture.
+    const searchBarStyle = useAnimatedStyle(() => ({
+        height: interpolate(collapse.value, [0, 1], [CONTROLS_HEIGHT, 0], Extrapolation.CLAMP),
+        opacity: interpolate(collapse.value, [0, 1], [1, 0], Extrapolation.CLAMP),
+        transform: [
+            { translateY: interpolate(collapse.value, [0, 1], [0, -12], Extrapolation.CLAMP) },
+        ],
+    }));
+
+    // A collapse triggered while the search input is focused would otherwise
+    // leave the keyboard open with nothing visible to type into.
+    useAnimatedReaction(
+        () => collapse.value > 0.5,
+        (isCollapsed, wasCollapsed) => {
+            if (isCollapsed && !wasCollapsed) runOnJS(Keyboard.dismiss)();
+        },
+    );
 
     const handleScroll = useCallback(
         (event: NativeSyntheticEvent<NativeScrollEvent>) => {
@@ -428,7 +458,7 @@ export default function HomeFeed() {
                     <TabHeader title="Feed" subtitle="Your news" />
                     <HeaderRule />
 
-                    <View style={search_styles.controls}>
+                    <ReAnimated.View style={[search_styles.controls, searchBarStyle]}>
                         <View
                             style={[
                                 search_styles.search_pill,
@@ -478,7 +508,7 @@ export default function HomeFeed() {
                         >
                             <Text style={search_styles.filter_pill_text}>{filter}</Text>
                         </TouchableOpacity>
-                    </View>
+                    </ReAnimated.View>
 
                     {loading && articles.length === 0 ? (
                         <View style={empty_styles.container}>
@@ -605,6 +635,7 @@ const makeSearchStyles = (theme: Theme) =>
             gap: 8,
             paddingHorizontal: 16,
             paddingBottom: 12,
+            overflow: 'hidden',
         },
         search_pill: {
             flex: 1,
