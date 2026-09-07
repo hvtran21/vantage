@@ -297,9 +297,6 @@ export const NewsCard = ({
                 </View>
             </TouchableOpacity>
 
-            {/* The card's own top-right corner, not the tag row -- that row is
-                only as wide as the text column, so pushing it to that row's
-                end stranded it in the gap before the thumbnail. */}
             <EllipsisButton
                 theme={theme}
                 style={styles.row_ellipsis_btn}

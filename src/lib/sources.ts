@@ -160,18 +160,13 @@ export async function listReportedDomains(token: string): Promise<string[]> {
 }
 
 /**
- * Mirrors one principal's server blocklist onto the device, replacing whatever
- * was there.
- *
- * Used when the principal itself changes -- signing in, out, or as a different
- * account. A union would be wrong here: it would carry one account's blocks into
- * the next person to sign in on a shared device, and push them up as if they
- * were theirs. Union stays for reconciling a single principal across offline
- * edits; a change of identity replaces.
- *
- * Anything blocked offline and never pushed is lost in that swap. The window is
- * narrow and the alternative -- pushing pending rows after the token they belong
- * to is already gone -- would attribute them to the wrong principal.
+ * Mirrors one principal's server blocklist onto the device, replacing
+ * whatever was there. Used when the principal itself changes (sign in, out,
+ * or switch account) -- a union would leak one account's blocks into the
+ * next person who signs in on a shared device, so identity changes replace
+ * rather than merge. Anything blocked offline and never pushed is lost in
+ * the swap; pushing it after its token is already gone would just attribute
+ * it to the wrong principal.
  */
 export async function replaceLocalBlocklist(token?: string | null): Promise<boolean> {
     const db = await getDb();

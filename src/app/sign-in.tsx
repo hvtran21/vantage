@@ -38,7 +38,6 @@ export default function SignInPage() {
     const { signIn } = useSignIn();
     const { signUp } = useSignUp();
 
-    // check signIn.status when it changes see if we can move them forward.
     useEffect(() => {
         if (signIn.status === 'complete') {
             signIn.finalize().then(() => router.replace('/(tabs)'));
