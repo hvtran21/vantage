@@ -1,6 +1,7 @@
 import { useState, useCallback, useMemo, useRef } from 'react';
 import { View, Text, StyleSheet, FlatList, Linking } from 'react-native';
 import { SafeAreaView, SafeAreaProvider } from 'react-native-safe-area-context';
+import { GestureDetector } from 'react-native-gesture-handler';
 import { useFocusEffect } from 'expo-router';
 import { useAuth } from '@clerk/expo';
 import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
@@ -15,6 +16,7 @@ import { useTheme, type Theme } from '@/components/Theme';
 import { useMotion } from '@/components/Motion';
 import { scaleMs, withMotion } from '@/lib/motion';
 import { useTabBarScroll } from '@/components/TabBarScroll';
+import { useSwipeTabGesture } from '@/components/SwipeTabs';
 import Animated, { FadeIn } from 'react-native-reanimated';
 
 function SavedEmptyState({
@@ -30,7 +32,12 @@ function SavedEmptyState({
             style={styles.empty_container}
         >
             <View style={styles.empty_icon_circle}>
-                <FontAwesomeIcon icon={faBookmark} size={28} color="white" style={{ opacity: 0.12 }} />
+                <FontAwesomeIcon
+                    icon={faBookmark}
+                    size={28}
+                    color="white"
+                    style={{ opacity: 0.12 }}
+                />
             </View>
             <Text style={styles.empty_title}>Nothing saved yet</Text>
             <Text style={styles.empty_subtitle}>
@@ -48,6 +55,7 @@ export default function SavedScreen() {
     const { getToken } = useAuth();
     const theme = useTheme();
     const styles = useMemo(() => makeStyles(theme), [theme]);
+    const swipeGesture = useSwipeTabGesture('saved');
 
     // Held in a ref so the focus effect has no dependencies. Clerk's getToken
     // is not referentially stable, so depending on it directly re-fired this
@@ -98,53 +106,55 @@ export default function SavedScreen() {
     );
 
     return (
-        <SafeAreaProvider>
-            <SafeAreaView style={styles.theme} edges={['top', 'left', 'right']}>
-                <TabHeader
-                    title="Saved"
-                    subtitle="Your collection"
-                    rightAccessory={
-                        savedArticles.length > 0 ? (
-                            <View style={styles.count_badge}>
-                                <Text style={styles.count_text}>{savedArticles.length}</Text>
-                            </View>
-                        ) : undefined
-                    }
-                />
-                <HeaderRule />
+        <GestureDetector gesture={swipeGesture}>
+            <SafeAreaProvider>
+                <SafeAreaView style={styles.theme} edges={['top', 'left', 'right']}>
+                    <TabHeader
+                        title="Saved"
+                        subtitle="Your collection"
+                        rightAccessory={
+                            savedArticles.length > 0 ? (
+                                <View style={styles.count_badge}>
+                                    <Text style={styles.count_text}>{savedArticles.length}</Text>
+                                </View>
+                            ) : undefined
+                        }
+                    />
+                    <HeaderRule />
 
-                <FlatList
-                    showsVerticalScrollIndicator={false}
-                    onScroll={tabBarOnScroll}
-                    scrollEventThrottle={16}
-                    data={savedArticles}
-                    contentContainerStyle={
-                        savedArticles.length === 0
-                            ? {
-                                  flexGrow: 1,
-                                  justifyContent: 'center',
-                                  paddingBottom: TAB_BAR_INSET,
-                              }
-                            : { flexGrow: 1, paddingBottom: TAB_BAR_INSET }
-                    }
-                    ListEmptyComponent={<SavedEmptyState scale={scale} styles={styles} />}
-                    renderItem={({ item }) => (
-                        <NewsCard
-                            title={item.title}
-                            url_to_image={item.url_to_image}
-                            published_at={item.published_at}
-                            genre={item.genre ?? ''}
-                            id={item.id}
-                            source={item.source}
-                            source_domain={item.source_domain}
-                            url={item.url}
-                            handleEllipsisPress={handleEllipsisPress}
-                        />
-                    )}
-                    keyExtractor={(item) => item.id}
-                />
-            </SafeAreaView>
-        </SafeAreaProvider>
+                    <FlatList
+                        showsVerticalScrollIndicator={false}
+                        onScroll={tabBarOnScroll}
+                        scrollEventThrottle={16}
+                        data={savedArticles}
+                        contentContainerStyle={
+                            savedArticles.length === 0
+                                ? {
+                                      flexGrow: 1,
+                                      justifyContent: 'center',
+                                      paddingBottom: TAB_BAR_INSET,
+                                  }
+                                : { flexGrow: 1, paddingBottom: TAB_BAR_INSET }
+                        }
+                        ListEmptyComponent={<SavedEmptyState scale={scale} styles={styles} />}
+                        renderItem={({ item }) => (
+                            <NewsCard
+                                title={item.title}
+                                url_to_image={item.url_to_image}
+                                published_at={item.published_at}
+                                genre={item.genre ?? ''}
+                                id={item.id}
+                                source={item.source}
+                                source_domain={item.source_domain}
+                                url={item.url}
+                                handleEllipsisPress={handleEllipsisPress}
+                            />
+                        )}
+                        keyExtractor={(item) => item.id}
+                    />
+                </SafeAreaView>
+            </SafeAreaProvider>
+        </GestureDetector>
     );
 }
 

@@ -188,11 +188,13 @@ function CustomTabBar({ state, descriptors, navigation }: CustomTabBarProps) {
 }
 
 export default function TabLayout() {
+    const { scale } = useMotion();
+
     return (
         <TabBarScrollProvider>
             <Tabs
                 tabBar={(props) => <CustomTabBar {...props} />}
-                screenOptions={{ headerShown: false }}
+                screenOptions={{ headerShown: false, animation: scale === 0 ? 'none' : 'shift' }}
             >
                 <Tabs.Screen
                     name="index"

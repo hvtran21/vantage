@@ -1,6 +1,7 @@
 import { useState, useCallback, useMemo, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Switch } from 'react-native';
 import { SafeAreaView, SafeAreaProvider } from 'react-native-safe-area-context';
+import { GestureDetector } from 'react-native-gesture-handler';
 import { useFocusEffect, router } from 'expo-router';
 import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
 import { faUser, faCheck, faSignOutAlt, faSignInAlt } from '@fortawesome/free-solid-svg-icons';
@@ -20,6 +21,7 @@ import { useMotion } from '@/components/Motion';
 import { scaleMs, withMotion, type MotionPreference } from '@/lib/motion';
 import { useHaptics } from '@/components/Haptics';
 import { useTabBarScroll } from '@/components/TabBarScroll';
+import { useSwipeTabGesture } from '@/components/SwipeTabs';
 import * as ExpoHaptics from 'expo-haptics';
 import Animated, { FadeIn } from 'react-native-reanimated';
 
@@ -373,6 +375,7 @@ export default function ProfileScreen() {
     const theme = useTheme();
     const styles = useMemo(() => makeStyles(theme), [theme]);
     const isSignedIn = !!user;
+    const swipeGesture = useSwipeTabGesture('profile');
 
     const handleSignOut = async () => {
         haptics.light();
@@ -387,66 +390,68 @@ export default function ProfileScreen() {
     };
 
     return (
-        <SafeAreaProvider>
-            <SafeAreaView style={styles.theme} edges={['top', 'left', 'right']}>
-                <TabHeader title="Profile" subtitle="Your account" />
-                <HeaderRule />
+        <GestureDetector gesture={swipeGesture}>
+            <SafeAreaProvider>
+                <SafeAreaView style={styles.theme} edges={['top', 'left', 'right']}>
+                    <TabHeader title="Profile" subtitle="Your account" />
+                    <HeaderRule />
 
-                <ScrollView
-                    contentContainerStyle={styles.scroll_content}
-                    showsVerticalScrollIndicator={false}
-                    keyboardShouldPersistTaps="handled"
-                    onScroll={tabBarOnScroll}
-                    scrollEventThrottle={16}
-                >
-                    <View style={styles.section}>
-                        <Text style={styles.section_label}>PROFILE</Text>
-                        <ProfileCard
-                            displayName={user?.fullName ?? ''}
-                            email={user?.primaryEmailAddress?.emailAddress ?? ''}
-                            signedIn={isSignedIn}
-                        />
-                        {isSignedIn ? (
-                            <TouchableOpacity
-                                style={styles.sign_out_button}
-                                onPress={handleSignOut}
-                                activeOpacity={0.7}
-                            >
-                                <FontAwesomeIcon
-                                    icon={faSignOutAlt}
-                                    size={14}
-                                    color={theme.danger}
-                                />
-                                <Text style={styles.sign_out_text}>Sign out</Text>
-                            </TouchableOpacity>
-                        ) : (
-                            <TouchableOpacity
-                                style={styles.sign_out_button}
-                                onPress={handleSignIn}
-                                activeOpacity={0.7}
-                            >
-                                <FontAwesomeIcon
-                                    icon={faSignInAlt}
-                                    size={14}
-                                    color={theme.accent}
-                                />
-                                <Text style={[styles.sign_out_text, { color: theme.accent }]}>
-                                    Sign in
-                                </Text>
-                            </TouchableOpacity>
-                        )}
-                    </View>
+                    <ScrollView
+                        contentContainerStyle={styles.scroll_content}
+                        showsVerticalScrollIndicator={false}
+                        keyboardShouldPersistTaps="handled"
+                        onScroll={tabBarOnScroll}
+                        scrollEventThrottle={16}
+                    >
+                        <View style={styles.section}>
+                            <Text style={styles.section_label}>PROFILE</Text>
+                            <ProfileCard
+                                displayName={user?.fullName ?? ''}
+                                email={user?.primaryEmailAddress?.emailAddress ?? ''}
+                                signedIn={isSignedIn}
+                            />
+                            {isSignedIn ? (
+                                <TouchableOpacity
+                                    style={styles.sign_out_button}
+                                    onPress={handleSignOut}
+                                    activeOpacity={0.7}
+                                >
+                                    <FontAwesomeIcon
+                                        icon={faSignOutAlt}
+                                        size={14}
+                                        color={theme.danger}
+                                    />
+                                    <Text style={styles.sign_out_text}>Sign out</Text>
+                                </TouchableOpacity>
+                            ) : (
+                                <TouchableOpacity
+                                    style={styles.sign_out_button}
+                                    onPress={handleSignIn}
+                                    activeOpacity={0.7}
+                                >
+                                    <FontAwesomeIcon
+                                        icon={faSignInAlt}
+                                        size={14}
+                                        color={theme.accent}
+                                    />
+                                    <Text style={[styles.sign_out_text, { color: theme.accent }]}>
+                                        Sign in
+                                    </Text>
+                                </TouchableOpacity>
+                            )}
+                        </View>
 
-                    <MotionPreferences />
+                        <MotionPreferences />
 
-                    <HapticsPreferences />
+                        <HapticsPreferences />
 
-                    <BlockedSources />
+                        <BlockedSources />
 
-                    <GenrePreferences />
-                </ScrollView>
-            </SafeAreaView>
-        </SafeAreaProvider>
+                        <GenrePreferences />
+                    </ScrollView>
+                </SafeAreaView>
+            </SafeAreaProvider>
+        </GestureDetector>
     );
 }
 

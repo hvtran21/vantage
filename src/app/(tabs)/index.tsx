@@ -15,10 +15,12 @@ import {
     type NativeSyntheticEvent,
 } from 'react-native';
 import { SafeAreaView, SafeAreaProvider } from 'react-native-safe-area-context';
+import { GestureDetector } from 'react-native-gesture-handler';
 import { useFocusEffect, router } from 'expo-router';
 import { useAuth } from '@clerk/expo';
 import { useActionSheet, type AnchorRect } from '@/components/ArticleActionSheet';
 import { useTabBarScroll } from '@/components/TabBarScroll';
+import { useSwipeTabGesture } from '@/components/SwipeTabs';
 import { getDb } from '@/lib/database';
 import { saveArticle, unsaveArticle } from '@/lib/savedArticles';
 import { NewsCard } from '@/components/NewsCard';
@@ -109,6 +111,7 @@ export default function HomeFeed() {
     const actionSheet = useActionSheet();
     const feedOptions = useFeedOptionsSheet();
     const { scale } = useMotion();
+    const swipeGesture = useSwipeTabGesture('index');
 
     const [refreshing, setRefreshing] = useState(false);
     const initialLoadDone = useRef(false);
@@ -473,161 +476,176 @@ export default function HomeFeed() {
     }, [filter, loadByFilter]);
 
     return (
-        <SafeAreaProvider>
-            <SafeAreaView style={base_template.theme} edges={['top', 'left', 'right']}>
-                <View style={base_template.config}>
-                    <TabHeader title="Feed" subtitle="Your news" />
-                    <HeaderRule />
+        <GestureDetector gesture={swipeGesture}>
+            <SafeAreaProvider>
+                <SafeAreaView style={base_template.theme} edges={['top', 'left', 'right']}>
+                    <View style={base_template.config}>
+                        <TabHeader title="Feed" subtitle="Your news" />
+                        <HeaderRule />
 
-                    <ReAnimated.View style={[search_styles.controls, searchBarStyle]}>
-                        <View
+                        <ReAnimated.View style={[search_styles.controls, searchBarStyle]}>
+                            <View
+                                style={[
+                                    search_styles.search_pill,
+                                    searchOpen && search_styles.search_pill_active,
+                                ]}
+                            >
+                                <FontAwesomeIcon
+                                    icon={faMagnifyingGlass}
+                                    size={13}
+                                    color={theme.text_tertiary}
+                                />
+                                <TextInput
+                                    ref={searchInputRef}
+                                    style={search_styles.search_input}
+                                    placeholder="Search articles, sources, authors"
+                                    placeholderTextColor={theme.text_tertiary}
+                                    value={searchQuery}
+                                    onChangeText={handleSearchChange}
+                                    returnKeyType="search"
+                                    autoCapitalize="none"
+                                    autoCorrect={false}
+                                    onSubmitEditing={() => Keyboard.dismiss()}
+                                />
+                                {searchQuery.length > 0 && (
+                                    <TouchableOpacity onPress={handleSearchClear} hitSlop={10}>
+                                        <FontAwesomeIcon
+                                            icon={faCircleXmark}
+                                            size={14}
+                                            color={theme.text_tertiary}
+                                        />
+                                    </TouchableOpacity>
+                                )}
+                            </View>
+
+                            <TouchableOpacity
+                                onPress={() => {
+                                    Keyboard.dismiss();
+                                    feedOptions.open({
+                                        filter,
+                                        onSelectFilter: setFilter,
+                                        onBlockedSourcesPress: () => router.push('/profile'),
+                                        onRefreshPress: onRefresh,
+                                    });
+                                }}
+                                style={search_styles.filter_pill}
+                                activeOpacity={0.7}
+                            >
+                                <Text style={search_styles.filter_pill_text}>{filter}</Text>
+                            </TouchableOpacity>
+                        </ReAnimated.View>
+
+                        {loading && articles.length === 0 ? (
+                            <View style={empty_styles.container}>
+                                <ActivityIndicator size="large" color={theme.accent} />
+                                <Text style={[empty_styles.subtitle, { marginTop: 16 }]}>
+                                    Loading articles...
+                                </Text>
+                            </View>
+                        ) : (
+                            <Animated.View
+                                style={{
+                                    opacity: fadeAnimArticles,
+                                    transform: [{ translateY: slideAnimArticles }],
+                                    flex: 1,
+                                }}
+                            >
+                                <FlatList
+                                    ref={flatListRef}
+                                    showsVerticalScrollIndicator={false}
+                                    data={articles}
+                                    keyboardShouldPersistTaps="handled"
+                                    onScroll={handleScroll}
+                                    scrollEventThrottle={16}
+                                    contentContainerStyle={
+                                        articles.length === 0
+                                            ? {
+                                                  flexGrow: 1,
+                                                  justifyContent: 'center',
+                                                  paddingBottom: TAB_BAR_INSET,
+                                              }
+                                            : { flexGrow: 1, paddingBottom: TAB_BAR_INSET }
+                                    }
+                                    bounces={true}
+                                    alwaysBounceVertical={true}
+                                    ListEmptyComponent={
+                                        <FeedEmptyState
+                                            scale={scale}
+                                            styles={empty_styles}
+                                            isSearching={searchOpen}
+                                        />
+                                    }
+                                    renderItem={({ item, index }) => (
+                                        <NewsCard
+                                            title={item.title}
+                                            url_to_image={item.url_to_image}
+                                            published_at={item.published_at}
+                                            genre={item.genre ?? ''}
+                                            id={item.id}
+                                            source={item.source}
+                                            source_domain={item.source_domain}
+                                            url={item.url}
+                                            variant={
+                                                index === 0 &&
+                                                !(searchOpen && searchQuery.length > 0)
+                                                    ? 'lead'
+                                                    : 'standard'
+                                            }
+                                            handleEllipsisPress={handleEllipsisPress}
+                                        />
+                                    )}
+                                    keyExtractor={(item) => item.id}
+                                    onEndReached={loadNextPage}
+                                    onEndReachedThreshold={0.5}
+                                    ListFooterComponent={
+                                        loadingMore ? (
+                                            <View
+                                                style={{
+                                                    paddingVertical: 20,
+                                                    alignItems: 'center',
+                                                }}
+                                            >
+                                                <ActivityIndicator
+                                                    size="small"
+                                                    color={theme.accent}
+                                                />
+                                            </View>
+                                        ) : null
+                                    }
+                                    refreshControl={
+                                        <RefreshControl
+                                            refreshing={refreshing}
+                                            onRefresh={onRefresh}
+                                            tintColor={theme.accent}
+                                        />
+                                    }
+                                />
+                            </Animated.View>
+                        )}
+
+                        <Animated.View
+                            pointerEvents={showScrollTop ? 'auto' : 'none'}
                             style={[
-                                search_styles.search_pill,
-                                searchOpen && search_styles.search_pill_active,
+                                fab_styles.container,
+                                { opacity: scrollTopAnim, transform: [{ scale: scrollTopAnim }] },
                             ]}
                         >
-                            <FontAwesomeIcon
-                                icon={faMagnifyingGlass}
-                                size={13}
-                                color={theme.text_tertiary}
-                            />
-                            <TextInput
-                                ref={searchInputRef}
-                                style={search_styles.search_input}
-                                placeholder="Search articles, sources, authors"
-                                placeholderTextColor={theme.text_tertiary}
-                                value={searchQuery}
-                                onChangeText={handleSearchChange}
-                                returnKeyType="search"
-                                autoCapitalize="none"
-                                autoCorrect={false}
-                                onSubmitEditing={() => Keyboard.dismiss()}
-                            />
-                            {searchQuery.length > 0 && (
-                                <TouchableOpacity onPress={handleSearchClear} hitSlop={10}>
-                                    <FontAwesomeIcon
-                                        icon={faCircleXmark}
-                                        size={14}
-                                        color={theme.text_tertiary}
-                                    />
-                                </TouchableOpacity>
-                            )}
-                        </View>
-
-                        <TouchableOpacity
-                            onPress={() => {
-                                Keyboard.dismiss();
-                                feedOptions.open({
-                                    filter,
-                                    onSelectFilter: setFilter,
-                                    onBlockedSourcesPress: () => router.push('/profile'),
-                                    onRefreshPress: onRefresh,
-                                });
-                            }}
-                            style={search_styles.filter_pill}
-                            activeOpacity={0.7}
-                        >
-                            <Text style={search_styles.filter_pill_text}>{filter}</Text>
-                        </TouchableOpacity>
-                    </ReAnimated.View>
-
-                    {loading && articles.length === 0 ? (
-                        <View style={empty_styles.container}>
-                            <ActivityIndicator size="large" color={theme.accent} />
-                            <Text style={[empty_styles.subtitle, { marginTop: 16 }]}>
-                                Loading articles...
-                            </Text>
-                        </View>
-                    ) : (
-                        <Animated.View
-                            style={{
-                                opacity: fadeAnimArticles,
-                                transform: [{ translateY: slideAnimArticles }],
-                                flex: 1,
-                            }}
-                        >
-                            <FlatList
-                                ref={flatListRef}
-                                showsVerticalScrollIndicator={false}
-                                data={articles}
-                                keyboardShouldPersistTaps="handled"
-                                onScroll={handleScroll}
-                                scrollEventThrottle={16}
-                                contentContainerStyle={
-                                    articles.length === 0
-                                        ? {
-                                              flexGrow: 1,
-                                              justifyContent: 'center',
-                                              paddingBottom: TAB_BAR_INSET,
-                                          }
-                                        : { flexGrow: 1, paddingBottom: TAB_BAR_INSET }
-                                }
-                                bounces={true}
-                                alwaysBounceVertical={true}
-                                ListEmptyComponent={
-                                    <FeedEmptyState
-                                        scale={scale}
-                                        styles={empty_styles}
-                                        isSearching={searchOpen}
-                                    />
-                                }
-                                renderItem={({ item, index }) => (
-                                    <NewsCard
-                                        title={item.title}
-                                        url_to_image={item.url_to_image}
-                                        published_at={item.published_at}
-                                        genre={item.genre ?? ''}
-                                        id={item.id}
-                                        source={item.source}
-                                        source_domain={item.source_domain}
-                                        url={item.url}
-                                        variant={
-                                            index === 0 && !(searchOpen && searchQuery.length > 0)
-                                                ? 'lead'
-                                                : 'standard'
-                                        }
-                                        handleEllipsisPress={handleEllipsisPress}
-                                    />
-                                )}
-                                keyExtractor={(item) => item.id}
-                                onEndReached={loadNextPage}
-                                onEndReachedThreshold={0.5}
-                                ListFooterComponent={
-                                    loadingMore ? (
-                                        <View style={{ paddingVertical: 20, alignItems: 'center' }}>
-                                            <ActivityIndicator size="small" color={theme.accent} />
-                                        </View>
-                                    ) : null
-                                }
-                                refreshControl={
-                                    <RefreshControl
-                                        refreshing={refreshing}
-                                        onRefresh={onRefresh}
-                                        tintColor={theme.accent}
-                                    />
-                                }
-                            />
+                            <TouchableOpacity
+                                onPress={scrollToTop}
+                                activeOpacity={0.8}
+                                style={fab_styles.button}
+                            >
+                                <FontAwesomeIcon
+                                    icon={faArrowUp}
+                                    size={16}
+                                    color={theme.on_accent}
+                                />
+                            </TouchableOpacity>
                         </Animated.View>
-                    )}
-
-                    <Animated.View
-                        pointerEvents={showScrollTop ? 'auto' : 'none'}
-                        style={[
-                            fab_styles.container,
-                            { opacity: scrollTopAnim, transform: [{ scale: scrollTopAnim }] },
-                        ]}
-                    >
-                        <TouchableOpacity
-                            onPress={scrollToTop}
-                            activeOpacity={0.8}
-                            style={fab_styles.button}
-                        >
-                            <FontAwesomeIcon icon={faArrowUp} size={16} color={theme.on_accent} />
-                        </TouchableOpacity>
-                    </Animated.View>
-                </View>
-            </SafeAreaView>
-        </SafeAreaProvider>
+                    </View>
+                </SafeAreaView>
+            </SafeAreaProvider>
+        </GestureDetector>
     );
 }
 
