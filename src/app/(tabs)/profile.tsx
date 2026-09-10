@@ -370,7 +370,7 @@ function BlockedSources() {
 export default function ProfileScreen() {
     const { user } = useUser();
     const { signOut } = useAuth();
-    const { onScroll: tabBarOnScroll } = useTabBarScroll();
+    const { onScroll: tabBarOnScroll, settleHandlers } = useTabBarScroll();
     const haptics = useHaptics();
     const theme = useTheme();
     const styles = useMemo(() => makeStyles(theme), [theme]);
@@ -401,6 +401,7 @@ export default function ProfileScreen() {
                         showsVerticalScrollIndicator={false}
                         keyboardShouldPersistTaps="handled"
                         onScroll={tabBarOnScroll}
+                        {...settleHandlers}
                         scrollEventThrottle={16}
                     >
                         <View style={styles.section}>

@@ -1,5 +1,5 @@
 import { useState, useCallback, useMemo, useRef } from 'react';
-import { View, Text, StyleSheet, FlatList, Linking } from 'react-native';
+import { View, Text, StyleSheet, FlatList } from 'react-native';
 import { SafeAreaView, SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureDetector } from 'react-native-gesture-handler';
 import { useFocusEffect } from 'expo-router';
@@ -7,6 +7,7 @@ import { useAuth } from '@clerk/expo';
 import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
 import { faBookmark } from '@fortawesome/free-solid-svg-icons';
 import Article from '@/lib/constants';
+import { openArticleBrowser } from '@/lib/browser';
 import { useActionSheet, type AnchorRect } from '@/components/ArticleActionSheet';
 import { getSavedArticles } from '@/lib/services';
 import { syncSavedArticles, unsaveArticle } from '@/lib/savedArticles';
@@ -50,7 +51,7 @@ function SavedEmptyState({
 export default function SavedScreen() {
     const [savedArticles, setSavedArticles] = useState<Article[]>([]);
     const actionSheet = useActionSheet();
-    const { onScroll: tabBarOnScroll } = useTabBarScroll();
+    const { onScroll: tabBarOnScroll, settleHandlers } = useTabBarScroll();
     const { scale } = useMotion();
     const { getToken } = useAuth();
     const theme = useTheme();
@@ -96,13 +97,10 @@ export default function SavedScreen() {
                     await unsaveArticle(article.id, token);
                     setSavedArticles(await getSavedArticles());
                 },
-                onOpenInBrowser: async () => {
-                    const supported = await Linking.canOpenURL(article.url);
-                    if (supported) await Linking.openURL(article.url);
-                },
+                onOpenInBrowser: () => openArticleBrowser(article.url, theme),
             });
         },
-        [savedArticles, actionSheet, getToken],
+        [savedArticles, actionSheet, getToken, theme],
     );
 
     return (
@@ -125,6 +123,7 @@ export default function SavedScreen() {
                     <FlatList
                         showsVerticalScrollIndicator={false}
                         onScroll={tabBarOnScroll}
+                        {...settleHandlers}
                         scrollEventThrottle={16}
                         data={savedArticles}
                         contentContainerStyle={

@@ -5,7 +5,6 @@ import {
     StyleSheet,
     TouchableOpacity,
     Animated,
-    Linking,
     FlatList,
     RefreshControl,
     ActivityIndicator,
@@ -31,6 +30,8 @@ import { faCircleXmark, faMagnifyingGlass, faArrowUp } from '@fortawesome/free-s
 import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Article from '@/lib/constants';
+import { openArticleBrowser } from '@/lib/browser';
+import { getInterests } from '@/lib/interests';
 import getArticles, {
     syncArticles,
     getAllArticles,
@@ -53,9 +54,11 @@ import ReAnimated, {
 
 type NetworkScope = { key: string; genre?: string; category?: string };
 
-// Pills are 44 tall plus the row's own 12 of bottom padding -- the collapse
-// animation below interpolates the row's height down from this to 0.
-const CONTROLS_HEIGHT = 56;
+// Pills are 44 tall plus the row's own 10 top / 12 bottom padding -- the
+// collapse animation below interpolates the row's height down from this to 0.
+// The top padding replaces the gap HeaderRule used to contribute back when it
+// sat above this row instead of below it.
+const CONTROLS_HEIGHT = 66;
 
 // Cursor pagination needs a single genre or category. CSV "Home" selections
 // keep the existing first-batch-only behavior.
@@ -116,6 +119,10 @@ export default function HomeFeed() {
     const [refreshing, setRefreshing] = useState(false);
     const initialLoadDone = useRef(false);
 
+    const filterRef = useRef(filter);
+    filterRef.current = filter;
+    const lastGenreSelection = useRef<string[] | null>(null);
+
     // Pagination
     const PAGE_SIZE = 20;
     // Where the local feed left off, by value. A page index would drift the
@@ -140,7 +147,7 @@ export default function HomeFeed() {
     const [showScrollTop, setShowScrollTop] = useState(false);
     const scrollTopAnim = useRef(new Animated.Value(0)).current;
 
-    const { onScroll: tabBarOnScroll, collapse } = useTabBarScroll();
+    const { onScroll: tabBarOnScroll, settleHandlers, collapse } = useTabBarScroll();
 
     // Shares the tab bar's own collapse value, so the search row and the tab
     // bar shrink away and reappear together on the same scroll gesture.
@@ -325,16 +332,13 @@ export default function HomeFeed() {
                         ),
                     );
                 },
-                onOpenInBrowser: async () => {
-                    const supported = await Linking.canOpenURL(article.url);
-                    if (supported) await Linking.openURL(article.url);
-                },
+                onOpenInBrowser: () => openArticleBrowser(article.url, theme),
                 onBlocked: (domain) => {
                     setArticles((prev) => prev.filter((item) => domainForArticle(item) !== domain));
                 },
             });
         },
-        [articles, actionSheet, getToken],
+        [articles, actionSheet, getToken, theme],
     );
 
     const animateContent = useCallback(() => {
@@ -423,6 +427,21 @@ export default function HomeFeed() {
                         return item.saved === saved ? item : { ...item, saved };
                     }),
                 );
+
+                // Deselected genres drop immediately; newly selected ones wait
+                // for a manual refresh (that data needs a server round trip).
+                if (filterRef.current === 'Home' && lastGenreSelection.current) {
+                    const currentGenres = await getInterests();
+                    const removedGenres = lastGenreSelection.current.filter(
+                        (genre) => !currentGenres.includes(genre),
+                    );
+                    if (removedGenres.length > 0) {
+                        setArticles((prev) =>
+                            prev.filter((item) => !item.genre || !removedGenres.includes(item.genre)),
+                        );
+                    }
+                    lastGenreSelection.current = currentGenres;
+                }
             })();
         }, []),
     );
@@ -432,6 +451,7 @@ export default function HomeFeed() {
             setLoading(true);
             try {
                 const existingPreferences = await AsyncStorage.getItem('genreSelection');
+                lastGenreSelection.current = existingPreferences ? existingPreferences.split(',') : [];
                 await syncAndCaptureCursors(existingPreferences);
                 const loadedArticles = await loadByFilter('Home');
                 setArticles(loadedArticles);
@@ -457,6 +477,9 @@ export default function HomeFeed() {
         const applyFilter = async () => {
             setLoading(true);
             try {
+                if (filter === 'Home') {
+                    lastGenreSelection.current = await getInterests();
+                }
                 const filtered = await loadByFilter(filter);
                 setArticles(filtered);
                 setCursor(cursorAfter(filtered));
@@ -481,7 +504,6 @@ export default function HomeFeed() {
                 <SafeAreaView style={base_template.theme} edges={['top', 'left', 'right']}>
                     <View style={base_template.config}>
                         <TabHeader title="Feed" subtitle="Your news" />
-                        <HeaderRule />
 
                         <ReAnimated.View style={[search_styles.controls, searchBarStyle]}>
                             <View
@@ -535,6 +557,8 @@ export default function HomeFeed() {
                             </TouchableOpacity>
                         </ReAnimated.View>
 
+                        <HeaderRule />
+
                         {loading && articles.length === 0 ? (
                             <View style={empty_styles.container}>
                                 <ActivityIndicator size="large" color={theme.accent} />
@@ -556,6 +580,7 @@ export default function HomeFeed() {
                                     data={articles}
                                     keyboardShouldPersistTaps="handled"
                                     onScroll={handleScroll}
+                                    {...settleHandlers}
                                     scrollEventThrottle={16}
                                     contentContainerStyle={
                                         articles.length === 0
@@ -679,6 +704,7 @@ const makeSearchStyles = (theme: Theme) =>
             flexDirection: 'row',
             gap: 8,
             paddingHorizontal: 16,
+            paddingTop: 10,
             paddingBottom: 12,
             overflow: 'hidden',
         },

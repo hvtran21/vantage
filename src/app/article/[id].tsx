@@ -9,7 +9,6 @@ import {
     Modal,
     Platform,
 } from 'react-native';
-import * as WebBrowser from 'expo-web-browser';
 import { Image } from 'expo-image';
 import { SafeAreaView, SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
@@ -26,6 +25,7 @@ import { faBookmark as faBookmarkOutline } from '@fortawesome/free-regular-svg-i
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth } from '@clerk/expo';
 import Article from '@/lib/constants';
+import { openArticleBrowser } from '@/lib/browser';
 import { getDb } from '@/lib/database';
 import { saveArticle, unsaveArticle } from '@/lib/savedArticles';
 import { formatDate } from '@/components/NewsCard';
@@ -106,11 +106,7 @@ export default function ArticleDetail() {
         const url = pendingBrowserUrl.current;
         pendingBrowserUrl.current = null;
         if (!url) return;
-        await WebBrowser.openBrowserAsync(url, {
-            toolbarColor: theme.elevated,
-            controlsColor: theme.accent,
-            dismissButtonStyle: 'close',
-        });
+        await openArticleBrowser(url, theme);
     };
 
     const handleConfirmOpenInBrowser = () => {
@@ -159,7 +155,7 @@ export default function ArticleDetail() {
                         <Image
                             source={imageSource}
                             style={styles.hero_image}
-                            contentFit="cover"
+                            contentFit="contain"
                             onError={() => setImageError(true)}
                             transition={300}
                         />
@@ -227,27 +223,27 @@ export default function ArticleDetail() {
                         </Animated.View>
                     )}
 
-                    {article.description && (
-                        <Animated.View
-                            entering={withMotion(scale, () =>
-                                FadeInDown.duration(scaleMs(scale, 400)).delay(scaleMs(scale, 160)),
-                            )}
-                            style={styles.content_block}
-                        >
-                            <Text style={styles.description}>{stripHtml(article.description)}</Text>
-                        </Animated.View>
-                    )}
-
-                    {article.content && (
-                        <Animated.View
-                            entering={withMotion(scale, () =>
-                                FadeInDown.duration(scaleMs(scale, 400)).delay(scaleMs(scale, 190)),
-                            )}
-                            style={styles.content_block}
-                        >
-                            <Text style={styles.content}>{stripHtml(article.content)}</Text>
-                        </Animated.View>
-                    )}
+                    {(() => {
+                        // NewsAPI sometimes leaves description empty while
+                        // content still has text -- fall back rather than
+                        // showing both (they're near-duplicates when both
+                        // are present, and content's is the messier copy).
+                        const body = article.description || article.content;
+                        return (
+                            body && (
+                                <Animated.View
+                                    entering={withMotion(scale, () =>
+                                        FadeInDown.duration(scaleMs(scale, 400)).delay(
+                                            scaleMs(scale, 160),
+                                        ),
+                                    )}
+                                    style={styles.content_block}
+                                >
+                                    <Text style={styles.description}>{stripHtml(body)}</Text>
+                                </Animated.View>
+                            )
+                        );
+                    })()}
 
                     <Animated.View
                         entering={withMotion(scale, () =>
@@ -459,6 +455,7 @@ const makeStyles = (theme: Theme) =>
         hero_wrapper: {
             width: '100%',
             height: 300,
+            backgroundColor: theme.bg,
         },
         hero_image: {
             width: '100%',
@@ -562,13 +559,6 @@ const makeStyles = (theme: Theme) =>
             fontSize: 17,
             color: theme.text_secondary,
             lineHeight: 27,
-            marginTop: 10,
-        },
-        content: {
-            fontFamily: 'WorkSans-Light',
-            fontSize: 16,
-            color: theme.text_secondary,
-            lineHeight: 25,
             marginTop: 10,
         },
         browser_button: {
