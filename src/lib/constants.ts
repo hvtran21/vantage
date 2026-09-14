@@ -13,4 +13,6 @@ export default interface Article {
     saved: number;
     // Sent by the API; null on rows cached before the column existed.
     source_domain?: string | null;
+    // When this article was opened on this device; null means unread.
+    read_at?: string | null;
 }

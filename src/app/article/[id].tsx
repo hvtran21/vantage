@@ -28,6 +28,7 @@ import Article from '@/lib/constants';
 import { openArticleBrowser } from '@/lib/browser';
 import { getDb } from '@/lib/database';
 import { saveArticle, unsaveArticle } from '@/lib/savedArticles';
+import { markArticleRead } from '@/lib/readState';
 import { formatDate } from '@/components/NewsCard';
 import { getTopicColor, hexToRgba, useTheme, type Theme } from '@/components/Theme';
 import { stripHtml } from '@/lib/utilities';
@@ -72,6 +73,10 @@ export default function ArticleDetail() {
             if (result) {
                 setArticle(result);
                 setSaved(result.saved === 1);
+                // Fire-and-forget: a failed stamp costs the reader nothing.
+                markArticleRead(result.id).catch((error) =>
+                    console.warn('[read] could not mark article read:', error),
+                );
             }
         };
         if (id) loadArticle();
@@ -599,7 +604,7 @@ const makeStyles = (theme: Theme) =>
             width: 32,
             height: 32,
             borderRadius: 16,
-            backgroundColor: 'rgba(255, 255, 255, 0.06)',
+            backgroundColor: theme.dark ? 'rgba(255, 255, 255, 0.06)' : 'rgba(15, 23, 32, 0.05)',
             justifyContent: 'center',
             alignItems: 'center',
             zIndex: 1,
@@ -665,7 +670,7 @@ const makeStyles = (theme: Theme) =>
             alignItems: 'center',
         },
         modal_button_secondary: {
-            backgroundColor: 'rgba(255, 255, 255, 0.06)',
+            backgroundColor: theme.dark ? 'rgba(255, 255, 255, 0.06)' : 'rgba(15, 23, 32, 0.05)',
         },
         modal_button_secondary_text: {
             fontFamily: 'WorkSans-SemiBold',

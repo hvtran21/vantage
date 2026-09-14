@@ -33,6 +33,14 @@ const ORDER_KEY = "COALESCE(published_at, '')";
 const ORDER_BY = `ORDER BY ${ORDER_KEY} DESC, id DESC`;
 const AFTER_CURSOR = `(${ORDER_KEY} < ? OR (${ORDER_KEY} = ? AND id < ?))`;
 
+// In the WHERE clause for the same reason NOT_BLOCKED is: filtering after the
+// LIMIT would return short pages.
+const UNREAD_ONLY = 'read_at IS NULL';
+
+export type FeedFilters = { hideRead?: boolean };
+
+const readClause = (filters?: FeedFilters) => (filters?.hideRead ? `AND ${UNREAD_ONLY}` : '');
+
 const cursorClause = (cursor?: LocalCursor) => (cursor ? `AND ${AFTER_CURSOR}` : '');
 const cursorParams = (cursor?: LocalCursor) =>
     cursor ? [cursor.publishedAt, cursor.publishedAt, cursor.id] : [];
@@ -90,6 +98,7 @@ export default async function getArticles(
     category?: string,
     limit: number = 20,
     cursor?: LocalCursor,
+    filters?: FeedFilters,
 ): Promise<Article[] | undefined> {
     const db = await getDb();
 
@@ -103,7 +112,8 @@ export default async function getArticles(
         const placeholders = genreList.map(() => '?').join(', ');
         return db.getAllAsync<Article>(
             `SELECT * FROM articles
-             WHERE genre IN (${placeholders}) AND ${NOT_BLOCKED} ${cursorClause(cursor)}
+             WHERE genre IN (${placeholders}) AND ${NOT_BLOCKED} ${readClause(filters)}
+             ${cursorClause(cursor)}
              ${ORDER_BY} LIMIT ?`,
             [...genreList, ...cursorParams(cursor), limit],
         );
@@ -112,7 +122,7 @@ export default async function getArticles(
     if (category !== undefined && genres === undefined) {
         return db.getAllAsync<Article>(
             `SELECT * FROM articles
-             WHERE category = ? AND ${NOT_BLOCKED} ${cursorClause(cursor)}
+             WHERE category = ? AND ${NOT_BLOCKED} ${readClause(filters)} ${cursorClause(cursor)}
              ${ORDER_BY} LIMIT ?`,
             [category, ...cursorParams(cursor), limit],
         );
@@ -128,11 +138,12 @@ export async function getSavedArticles(): Promise<Article[]> {
 export async function getAllArticles(
     limit: number = 100,
     cursor?: LocalCursor,
+    filters?: FeedFilters,
 ): Promise<Article[]> {
     const db = await getDb();
     const results = await db.getAllAsync(
         `SELECT * FROM articles
-         WHERE ${NOT_BLOCKED} ${cursorClause(cursor)}
+         WHERE ${NOT_BLOCKED} ${readClause(filters)} ${cursorClause(cursor)}
          ${ORDER_BY} LIMIT ?`,
         [...cursorParams(cursor), limit],
     );
@@ -150,7 +161,8 @@ async function queryLocalArticles(query: string): Promise<Article[]> {
     const results = await db.getAllAsync(
         // The OR needs its own parentheses, or the block filter would only apply
         // to the description half.
-        `SELECT * FROM articles WHERE (title LIKE ? OR description LIKE ?) AND ${NOT_BLOCKED} LIMIT ?`,
+        `SELECT * FROM articles WHERE (title LIKE ? OR description LIKE ?) AND ${NOT_BLOCKED}
+         ${ORDER_BY} LIMIT ?`,
         [searchTerm, searchTerm, SEARCH_LIMIT],
     );
     return (results as Article[]) ?? [];

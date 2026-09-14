@@ -28,6 +28,7 @@ import {
     faArrowsRotate,
     faCheck,
     faChevronRight,
+    faEnvelope,
 } from '@fortawesome/free-solid-svg-icons';
 import { useTheme, useThemeMode, type Theme, type ThemeMode } from '@/components/Theme';
 import { useMotion } from '@/components/Motion';
@@ -55,6 +56,8 @@ export type FeedOptionsRequest = {
     onSelectFilter: (filter: string) => void;
     onBlockedSourcesPress: () => void;
     onRefreshPress: () => void;
+    hideRead: boolean;
+    onToggleHideRead: (next: boolean) => void;
 };
 
 type FeedOptionsApi = {
@@ -120,6 +123,9 @@ export function FeedOptionsProvider({ children }: { children: ReactNode }) {
     const haptics = useHaptics();
     const styles = useMemo(() => makeStyles(theme), [theme]);
     const [refreshHint, setRefreshHint] = useState('');
+    // `request` is a snapshot taken at open(), so this row owns what it displays
+    // -- same as ArticleActionSheet's `saved`.
+    const [hideRead, setHideRead] = useState(false);
 
     const progress = useSharedValue(0);
     const closing = useRef(false);
@@ -144,6 +150,7 @@ export function FeedOptionsProvider({ children }: { children: ReactNode }) {
         (next: FeedOptionsRequest) => {
             closing.current = false;
             setRequest(next);
+            setHideRead(next.hideRead);
             setMounted(true);
             progress.value = scale === 0 ? 1 : withSpring(1, scaleSpring(scale, POP));
         },
@@ -208,6 +215,28 @@ export function FeedOptionsProvider({ children }: { children: ReactNode }) {
                                     }}
                                 />
                             ))}
+
+                            <View style={styles.divide} />
+                            <OptionRow
+                                styles={styles}
+                                theme={theme}
+                                icon={faEnvelope}
+                                name="Hide read"
+                                hint={
+                                    hideRead
+                                        ? 'Articles you have opened stay out'
+                                        : 'Read articles stay, dimmed'
+                                }
+                                selected={hideRead}
+                                // Stays open, unlike the Show rows: this can
+                                // empty the feed, so flipping back must be easy.
+                                onPress={() => {
+                                    haptics.selection();
+                                    const next = !hideRead;
+                                    setHideRead(next);
+                                    request.onToggleHideRead(next);
+                                }}
+                            />
 
                             <View style={styles.divide} />
                             <Text style={styles.seclabel}>Appearance</Text>

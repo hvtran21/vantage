@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo, useRef } from 'react';
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Switch } from 'react-native';
 import { SafeAreaView, SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureDetector } from 'react-native-gesture-handler';
@@ -8,7 +8,14 @@ import { faUser, faCheck, faSignOutAlt, faSignInAlt } from '@fortawesome/free-so
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useUser, useAuth } from '@clerk/expo';
 import { TabHeader, HeaderRule } from '@/components/styles';
-import { getTopicColor, useTheme, type Theme } from '@/components/Theme';
+import {
+    getTopicColor,
+    useTheme,
+    useThemePreset,
+    THEME_PRESET_META,
+    THEME_PRESETS,
+    type Theme,
+} from '@/components/Theme';
 import {
     listBlocked,
     listReportedDomains,
@@ -17,6 +24,7 @@ import {
     type BlockedSource,
 } from '@/lib/sources';
 import { getInterests, addInterest, removeInterest, syncInterests } from '@/lib/interests';
+import { clearReadHistory, countReadArticles } from '@/lib/readState';
 import { useMotion } from '@/components/Motion';
 import { scaleMs, withMotion, type MotionPreference } from '@/lib/motion';
 import { useHaptics } from '@/components/Haptics';
@@ -57,6 +65,14 @@ function GenrePreferences() {
     const getTokenRef = useRef(getToken);
     getTokenRef.current = getToken;
 
+    // The "Updated" badge hides on a timer that can outlive the screen.
+    const savedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+    useEffect(() => {
+        return () => {
+            if (savedTimer.current) clearTimeout(savedTimer.current);
+        };
+    }, []);
+
     useFocusEffect(
         useCallback(() => {
             let cancelled = false;
@@ -85,7 +101,8 @@ function GenrePreferences() {
             setSelected(await getInterests());
         }
         setSaved(true);
-        setTimeout(() => setSaved(false), 1500);
+        if (savedTimer.current) clearTimeout(savedTimer.current);
+        savedTimer.current = setTimeout(() => setSaved(false), 1500);
     };
 
     return (
@@ -97,7 +114,7 @@ function GenrePreferences() {
                         entering={withMotion(scale, () => FadeIn.duration(scaleMs(scale, 200)))}
                         style={styles.saved_inline}
                     >
-                        <FontAwesomeIcon icon={faCheck} size={10} color="#4ade80" />
+                        <FontAwesomeIcon icon={faCheck} size={10} color={theme.accent} />
                         <Text style={styles.saved_inline_text}>Updated</Text>
                     </Animated.View>
                 )}
@@ -195,6 +212,81 @@ function MotionPreferences() {
     );
 }
 
+function ThemePresets() {
+    const { preset, setPreset, customThemesEnabled, setCustomThemesEnabled } = useThemePreset();
+    const haptics = useHaptics();
+    const theme = useTheme();
+    const styles = useMemo(() => makeStyles(theme), [theme]);
+
+    const toggleGate = (next: boolean) => {
+        haptics.selection();
+        setCustomThemesEnabled(next);
+    };
+
+    const choosePreset = (id: (typeof THEME_PRESET_META)[number]['id']) => {
+        haptics.selection();
+        setPreset(id);
+    };
+
+    return (
+        <View style={styles.section}>
+            <View style={styles.motion_row}>
+                <View style={{ flex: 1 }}>
+                    <Text style={styles.section_label}>CUSTOM THEMES</Text>
+                    <Text style={[styles.section_hint, { marginBottom: 0 }]}>
+                        Unlock additional color themes
+                    </Text>
+                </View>
+                <Switch
+                    value={customThemesEnabled}
+                    onValueChange={toggleGate}
+                    {...switchColors(theme)}
+                />
+            </View>
+
+            {customThemesEnabled && (
+                <View style={styles.preset_row}>
+                    {THEME_PRESET_META.map((item) => {
+                        const active = preset === item.id;
+                        const colors = THEME_PRESETS[item.id];
+                        return (
+                            <TouchableOpacity
+                                key={item.id}
+                                onPress={() => choosePreset(item.id)}
+                                activeOpacity={0.7}
+                                style={styles.preset_option}
+                            >
+                                <View
+                                    style={[
+                                        styles.preset_swatch,
+                                        active
+                                            ? { borderColor: theme.accent, borderWidth: 2 }
+                                            : { borderColor: theme.border, borderWidth: 1 },
+                                    ]}
+                                >
+                                    <View
+                                        style={[
+                                            styles.preset_swatch_half,
+                                            { backgroundColor: colors.dark.bg },
+                                        ]}
+                                    />
+                                    <View
+                                        style={[
+                                            styles.preset_swatch_half,
+                                            { backgroundColor: colors.light.bg },
+                                        ]}
+                                    />
+                                </View>
+                                <Text style={styles.preset_label}>{item.label}</Text>
+                            </TouchableOpacity>
+                        );
+                    })}
+                </View>
+            )}
+        </View>
+    );
+}
+
 function HapticsPreferences() {
     const { enabled, setEnabled } = useHaptics();
     const theme = useTheme();
@@ -216,7 +308,7 @@ function HapticsPreferences() {
                         Feel a light tap on taps, saves, and toggles.
                     </Text>
                 </View>
-                <Switch value={enabled} onValueChange={toggle} />
+                <Switch value={enabled} onValueChange={toggle} {...switchColors(theme)} />
             </View>
         </View>
     );
@@ -243,12 +335,7 @@ function ProfileCard({
                 </View>
             ) : (
                 <View style={styles.card_avatar_empty}>
-                    <FontAwesomeIcon
-                        icon={faUser}
-                        size={18}
-                        color="white"
-                        style={{ opacity: 0.15 }}
-                    />
+                    <FontAwesomeIcon icon={faUser} size={18} color={theme.border_strong} />
                 </View>
             )}
             <View style={styles.card_info}>
@@ -256,6 +343,71 @@ function ProfileCard({
                     {displayName || (signedIn ? 'Signed in' : 'Not signed in')}
                 </Text>
                 {email.length > 0 && <Text style={styles.card_email}>{email}</Text>}
+            </View>
+        </View>
+    );
+}
+
+function ReadingHistory() {
+    const haptics = useHaptics();
+    const theme = useTheme();
+    const styles = useMemo(() => makeStyles(theme), [theme]);
+    const [count, setCount] = useState<number | null>(null);
+
+    // On focus, not mount: the way back from an article is a tab switch.
+    useFocusEffect(
+        useCallback(() => {
+            let cancelled = false;
+            countReadArticles()
+                .then((total) => {
+                    if (!cancelled) setCount(total);
+                })
+                .catch((error) => console.warn('[profile] could not count read articles:', error));
+            return () => {
+                cancelled = true;
+            };
+        }, []),
+    );
+
+    const handleClear = () => {
+        haptics.warning();
+        setCount(0);
+        clearReadHistory().catch((error) => {
+            console.warn('[profile] could not clear read history:', error);
+            countReadArticles()
+                .then(setCount)
+                .catch(() => {});
+        });
+    };
+
+    const total = count ?? 0;
+
+    return (
+        <View style={styles.section}>
+            <Text style={styles.section_label}>READING</Text>
+            <Text style={styles.section_hint}>
+                Articles you have opened are dimmed in the feed. This never leaves your device.
+            </Text>
+
+            <View style={[styles.source_row, styles.source_row_first, styles.source_row_last]}>
+                <View style={styles.source_info}>
+                    <Text style={styles.source_domain}>
+                        {count === null
+                            ? 'Counting...'
+                            : total === 0
+                              ? 'Nothing read yet'
+                              : `${total} article${total === 1 ? '' : 's'} read`}
+                    </Text>
+                </View>
+                {total > 0 && (
+                    <TouchableOpacity
+                        onPress={handleClear}
+                        style={styles.unblock_hit}
+                        activeOpacity={0.7}
+                    >
+                        <Text style={styles.unblock_text}>Clear</Text>
+                    </TouchableOpacity>
+                )}
             </View>
         </View>
     );
@@ -444,7 +596,11 @@ export default function ProfileScreen() {
 
                         <MotionPreferences />
 
+                        <ThemePresets />
+
                         <HapticsPreferences />
+
+                        <ReadingHistory />
 
                         <BlockedSources />
 
@@ -455,6 +611,13 @@ export default function ProfileScreen() {
         </GestureDetector>
     );
 }
+
+// Switch is the one control that ships its own colors.
+const switchColors = (theme: Theme) => ({
+    trackColor: { false: theme.border_strong, true: theme.accent },
+    thumbColor: theme.on_accent,
+    ios_backgroundColor: theme.border_strong,
+});
 
 const makeStyles = (theme: Theme) =>
     StyleSheet.create({
@@ -500,7 +663,7 @@ const makeStyles = (theme: Theme) =>
         saved_inline_text: {
             fontFamily: 'WorkSans-Regular',
             fontSize: 12,
-            color: '#4ade80',
+            color: theme.accent,
         },
         source_row: {
             flexDirection: 'row',
@@ -589,6 +752,30 @@ const makeStyles = (theme: Theme) =>
         motion_option_text_active: {
             fontFamily: 'WorkSans-SemiBold',
             color: theme.accent,
+        },
+        preset_row: {
+            flexDirection: 'row',
+            gap: 18,
+            marginTop: 14,
+        },
+        preset_option: {
+            alignItems: 'center',
+            gap: 6,
+        },
+        preset_swatch: {
+            width: 40,
+            height: 40,
+            borderRadius: 20,
+            overflow: 'hidden',
+            flexDirection: 'row',
+        },
+        preset_swatch_half: {
+            flex: 1,
+        },
+        preset_label: {
+            fontFamily: 'WorkSans-Regular',
+            fontSize: 12,
+            color: theme.text_secondary,
         },
         chip: {
             backgroundColor: theme.surface,

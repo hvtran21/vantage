@@ -32,6 +32,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import Article from '@/lib/constants';
 import { openArticleBrowser } from '@/lib/browser';
 import { getInterests } from '@/lib/interests';
+import { getHideRead, getReadStamps, setHideRead } from '@/lib/readState';
 import getArticles, {
     syncArticles,
     getAllArticles,
@@ -79,20 +80,31 @@ function FeedEmptyState({
     scale,
     styles,
     isSearching,
+    hideRead,
 }: {
     scale: number;
     styles: ReturnType<typeof makeEmptyStyles>;
     isSearching: boolean;
+    hideRead: boolean;
 }) {
+    const title = isSearching
+        ? 'No results'
+        : hideRead
+          ? "You're all caught up"
+          : 'No articles yet';
+    const subtitle = isSearching
+        ? 'Try different keywords.'
+        : hideRead
+          ? 'Every article here is read. Pull down for more, or turn off Hide read.'
+          : 'Pull down to refresh.';
+
     return (
         <ReAnimated.View
             entering={withMotion(scale, () => FadeIn.duration(scaleMs(scale, 500)))}
             style={styles.container}
         >
-            <Text style={styles.title}>{isSearching ? 'No results' : 'No articles yet'}</Text>
-            <Text style={styles.subtitle}>
-                {isSearching ? 'Try different keywords.' : 'Pull down to refresh.'}
-            </Text>
+            <Text style={styles.title}>{title}</Text>
+            <Text style={styles.subtitle}>{subtitle}</Text>
         </ReAnimated.View>
     );
 }
@@ -128,8 +140,18 @@ export default function HomeFeed() {
     // Where the local feed left off, by value. A page index would drift the
     // moment blocking a publisher purged its cached rows.
     const [cursor, setCursor] = useState<LocalCursor | undefined>(undefined);
+    // Read through a ref, not a dependency, so flipping it doesn't rebuild every
+    // callback that closes over loadByFilter.
+    const [hideRead, setHideReadState] = useState(false);
+    const hideReadRef = useRef(false);
+    hideReadRef.current = hideRead;
     const [loadingMore, setLoadingMore] = useState(false);
+    // State lands too late to stop a second onEndReached in the same tick.
+    const loadingMoreRef = useRef(false);
     const [hasMore, setHasMore] = useState(true);
+    // Bumped by anything that replaces the list from the top. A page still in
+    // flight then holds a cursor into a result set that no longer exists.
+    const feedGeneration = useRef(0);
 
     // Cursor per scope (see getNetworkScope) so Home's and Top's don't clobber each other.
     const [networkCursors, setNetworkCursors] = useState<Record<string, string | null>>({});
@@ -141,6 +163,8 @@ export default function HomeFeed() {
     const searchInputRef = useRef<TextInput>(null);
     const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
     const preSearchArticles = useRef<Article[] | null>(null);
+    // searchArticles hits the network, so only the newest run may publish.
+    const searchRunId = useRef(0);
 
     // Scroll-to-top
     const flatListRef = useRef<FlatList>(null);
@@ -202,15 +226,18 @@ export default function HomeFeed() {
     const loadByFilter = useCallback(
         async (activeFilter: string, from?: LocalCursor): Promise<Article[]> => {
             const userPreferences = await AsyncStorage.getItem('genreSelection');
+            const filters = { hideRead: hideReadRef.current };
             if (activeFilter === 'Recent') {
-                return await getAllArticles(PAGE_SIZE, from);
+                return await getAllArticles(PAGE_SIZE, from, filters);
             } else if (activeFilter === 'Top') {
-                return (await getArticles(undefined, 'Technology', PAGE_SIZE, from)) ?? [];
+                return (await getArticles(undefined, 'Technology', PAGE_SIZE, from, filters)) ?? [];
             }
             if (userPreferences) {
-                return (await getArticles(userPreferences, undefined, PAGE_SIZE, from)) ?? [];
+                return (
+                    (await getArticles(userPreferences, undefined, PAGE_SIZE, from, filters)) ?? []
+                );
             }
-            return (await getArticles(undefined, 'Technology', PAGE_SIZE, from)) ?? [];
+            return (await getArticles(undefined, 'Technology', PAGE_SIZE, from, filters)) ?? [];
         },
         [],
     );
@@ -253,55 +280,98 @@ export default function HomeFeed() {
         await syncAndCaptureCursors(userPreferences);
 
         const newArticles = await loadByFilter(filter);
-        setArticles(newArticles);
+        feedGeneration.current++;
         setCursor(cursorAfter(newArticles));
         setHasMore(newArticles.length >= PAGE_SIZE);
+        // Mid-search the list belongs to the query, so refresh the feed behind it
+        // rather than the visible results.
+        if (preSearchArticles.current) {
+            preSearchArticles.current = newArticles;
+        } else {
+            setArticles(newArticles);
+        }
         setRefreshing(false);
     }, [filter, loadByFilter, syncAndCaptureCursors]);
 
     const loadNextPage = useCallback(async () => {
-        if (loadingMore || !hasMore || searchOpen) return;
+        if (loadingMoreRef.current || !hasMore || searchOpen) return;
+        loadingMoreRef.current = true;
+        const generation = feedGeneration.current;
 
         setLoadingMore(true);
-        let nextBatch = await loadByFilter(filter, cursor);
+        try {
+            let nextBatch = await loadByFilter(filter, cursor);
 
-        // Local cache ran out, try a network top-up before giving up.
-        if (nextBatch.length < PAGE_SIZE) {
-            const userPreferences = await AsyncStorage.getItem('genreSelection');
-            const scope = getNetworkScope(filter, userPreferences);
-            // The API's opaque cursor, distinct from the local keyset one above.
-            const networkCursor = scope ? networkCursors[scope.key] : undefined;
+            // Local cache ran out, try a network top-up before giving up.
+            if (nextBatch.length < PAGE_SIZE) {
+                const userPreferences = await AsyncStorage.getItem('genreSelection');
+                const scope = getNetworkScope(filter, userPreferences);
+                // The API's opaque cursor, distinct from the local keyset one above.
+                const networkCursor = scope ? networkCursors[scope.key] : undefined;
 
-            if (scope && networkCursor) {
-                const token = (await getToken()) ?? undefined;
-                const outcome = await syncArticles(
-                    scope.genre,
-                    scope.category,
-                    networkCursor,
-                    token,
-                );
-                setNetworkCursors((prev) => ({
-                    ...prev,
-                    // Keep the prior cursor on failure so the next scroll retries.
-                    [scope.key]: outcome ? outcome.nextCursor : prev[scope.key],
-                }));
-                if (outcome) {
-                    // Re-read from the same local position; the sync only added
-                    // rows further down the order.
-                    nextBatch = await loadByFilter(filter, cursor);
+                if (scope && networkCursor) {
+                    const token = (await getToken()) ?? undefined;
+                    const outcome = await syncArticles(
+                        scope.genre,
+                        scope.category,
+                        networkCursor,
+                        token,
+                    );
+                    setNetworkCursors((prev) => ({
+                        ...prev,
+                        // Keep the prior cursor on failure so the next scroll retries.
+                        [scope.key]: outcome ? outcome.nextCursor : prev[scope.key],
+                    }));
+                    if (outcome) {
+                        // Re-read from the same local position; the sync only added
+                        // rows further down the order.
+                        nextBatch = await loadByFilter(filter, cursor);
+                    }
                 }
             }
-        }
 
-        if (nextBatch.length < PAGE_SIZE) {
-            setHasMore(false);
+            // The list was rebuilt underneath this page -- drop it whole.
+            if (generation !== feedGeneration.current) return;
+
+            if (nextBatch.length < PAGE_SIZE) {
+                setHasMore(false);
+            }
+            if (nextBatch.length > 0) {
+                setArticles((prev) => [...prev, ...nextBatch]);
+                setCursor(cursorAfter(nextBatch));
+            }
+        } finally {
+            // finally, or a thrown read leaves pagination dead for the session.
+            loadingMoreRef.current = false;
+            setLoadingMore(false);
         }
-        if (nextBatch.length > 0) {
-            setArticles((prev) => [...prev, ...nextBatch]);
-            setCursor(cursorAfter(nextBatch));
-        }
-        setLoadingMore(false);
-    }, [loadingMore, hasMore, searchOpen, cursor, filter, loadByFilter, networkCursors, getToken]);
+    }, [hasMore, searchOpen, cursor, filter, loadByFilter, networkCursors, getToken]);
+
+    const handleToggleHideRead = useCallback(
+        (next: boolean) => {
+            hideReadRef.current = next;
+            setHideReadState(next);
+            setHideRead(next).catch((error) =>
+                console.warn('[read] could not store hide-read preference:', error),
+            );
+            // The filter is in the WHERE clause, so the cursor is now meaningless.
+            (async () => {
+                const reloaded = await loadByFilter(filterRef.current);
+                feedGeneration.current++;
+                setArticles(reloaded);
+                setCursor(cursorAfter(reloaded));
+                setHasMore(reloaded.length >= PAGE_SIZE);
+            })().catch((error) => console.error('[read] reload after toggle failed:', error));
+        },
+        [loadByFilter],
+    );
+
+    const handleReadChange = useCallback((id: string, readAt: string | null) => {
+        setArticles((prev) => {
+            const next = prev.map((item) => (item.id === id ? { ...item, read_at: readAt } : item));
+            return hideReadRef.current && readAt ? next.filter((item) => item.id !== id) : next;
+        });
+    }, []);
 
     const handleEllipsisPress = useCallback(
         (id: string, anchor: AnchorRect) => {
@@ -336,9 +406,10 @@ export default function HomeFeed() {
                 onBlocked: (domain) => {
                     setArticles((prev) => prev.filter((item) => domainForArticle(item) !== domain));
                 },
+                onReadChange: handleReadChange,
             });
         },
-        [articles, actionSheet, getToken, theme],
+        [articles, actionSheet, getToken, theme, handleReadChange],
     );
 
     const animateContent = useCallback(() => {
@@ -363,6 +434,7 @@ export default function HomeFeed() {
             }
             setSearchQuery(text);
             if (debounceTimer.current) clearTimeout(debounceTimer.current);
+            const runId = ++searchRunId.current;
             debounceTimer.current = setTimeout(async () => {
                 if (text.trim().length === 0) {
                     if (preSearchArticles.current) {
@@ -373,6 +445,7 @@ export default function HomeFeed() {
                 }
                 const token = (await getToken()) ?? undefined;
                 const results = await searchArticles(text.trim(), token);
+                if (runId !== searchRunId.current) return;
                 setArticles(results);
             }, 300);
         },
@@ -381,6 +454,7 @@ export default function HomeFeed() {
 
     const handleSearchClear = useCallback(() => {
         if (debounceTimer.current) clearTimeout(debounceTimer.current);
+        searchRunId.current++;
         setSearchQuery('');
         searchInputRef.current?.clear();
         Keyboard.dismiss();
@@ -421,12 +495,18 @@ export default function HomeFeed() {
                     id: string;
                 }[];
                 const savedIds = new Set(rows.map((row) => row.id));
-                setArticles((prev) =>
-                    prev.map((item) => {
+                // Stamped by article/[id] while this list was off-screen.
+                const readAt = await getReadStamps();
+                setArticles((prev) => {
+                    const next = prev.map((item) => {
                         const saved = savedIds.has(item.id) ? 1 : 0;
-                        return item.saved === saved ? item : { ...item, saved };
-                    }),
-                );
+                        const read_at = readAt.get(item.id) ?? null;
+                        return item.saved === saved && (item.read_at ?? null) === read_at
+                            ? item
+                            : { ...item, saved, read_at };
+                    });
+                    return hideReadRef.current ? next.filter((item) => !item.read_at) : next;
+                });
 
                 // Deselected genres drop immediately; newly selected ones wait
                 // for a manual refresh (that data needs a server round trip).
@@ -437,7 +517,9 @@ export default function HomeFeed() {
                     );
                     if (removedGenres.length > 0) {
                         setArticles((prev) =>
-                            prev.filter((item) => !item.genre || !removedGenres.includes(item.genre)),
+                            prev.filter(
+                                (item) => !item.genre || !removedGenres.includes(item.genre),
+                            ),
                         );
                     }
                     lastGenreSelection.current = currentGenres;
@@ -450,8 +532,15 @@ export default function HomeFeed() {
         const loadArticles = async () => {
             setLoading(true);
             try {
+                // Before loadByFilter, which reads it through hideReadRef.
+                const storedHideRead = await getHideRead();
+                hideReadRef.current = storedHideRead;
+                setHideReadState(storedHideRead);
+
                 const existingPreferences = await AsyncStorage.getItem('genreSelection');
-                lastGenreSelection.current = existingPreferences ? existingPreferences.split(',') : [];
+                lastGenreSelection.current = existingPreferences
+                    ? existingPreferences.split(',')
+                    : [];
                 await syncAndCaptureCursors(existingPreferences);
                 const loadedArticles = await loadByFilter('Home');
                 setArticles(loadedArticles);
@@ -481,6 +570,7 @@ export default function HomeFeed() {
                     lastGenreSelection.current = await getInterests();
                 }
                 const filtered = await loadByFilter(filter);
+                feedGeneration.current++;
                 setArticles(filtered);
                 setCursor(cursorAfter(filtered));
                 setHasMore(filtered.length >= PAGE_SIZE);
@@ -548,6 +638,8 @@ export default function HomeFeed() {
                                         onSelectFilter: setFilter,
                                         onBlockedSourcesPress: () => router.push('/profile'),
                                         onRefreshPress: onRefresh,
+                                        hideRead,
+                                        onToggleHideRead: handleToggleHideRead,
                                     });
                                 }}
                                 style={search_styles.filter_pill}
@@ -598,6 +690,7 @@ export default function HomeFeed() {
                                             scale={scale}
                                             styles={empty_styles}
                                             isSearching={searchOpen}
+                                            hideRead={hideRead}
                                         />
                                     }
                                     renderItem={({ item, index }) => (
@@ -610,6 +703,7 @@ export default function HomeFeed() {
                                             source={item.source}
                                             source_domain={item.source_domain}
                                             url={item.url}
+                                            read={Boolean(item.read_at)}
                                             variant={
                                                 index === 0 &&
                                                 !(searchOpen && searchQuery.length > 0)

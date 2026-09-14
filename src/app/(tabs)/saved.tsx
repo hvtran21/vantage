@@ -23,9 +23,11 @@ import Animated, { FadeIn } from 'react-native-reanimated';
 function SavedEmptyState({
     scale,
     styles,
+    theme,
 }: {
     scale: number;
     styles: ReturnType<typeof makeStyles>;
+    theme: Theme;
 }) {
     return (
         <Animated.View
@@ -33,12 +35,7 @@ function SavedEmptyState({
             style={styles.empty_container}
         >
             <View style={styles.empty_icon_circle}>
-                <FontAwesomeIcon
-                    icon={faBookmark}
-                    size={28}
-                    color="white"
-                    style={{ opacity: 0.12 }}
-                />
+                <FontAwesomeIcon icon={faBookmark} size={28} color={theme.border_strong} />
             </View>
             <Text style={styles.empty_title}>Nothing saved yet</Text>
             <Text style={styles.empty_subtitle}>
@@ -98,6 +95,11 @@ export default function SavedScreen() {
                     setSavedArticles(await getSavedArticles());
                 },
                 onOpenInBrowser: () => openArticleBrowser(article.url, theme),
+                // Never filtered here -- Saved is curated, so a read row just dims.
+                onReadChange: (id, readAt) =>
+                    setSavedArticles((prev) =>
+                        prev.map((item) => (item.id === id ? { ...item, read_at: readAt } : item)),
+                    ),
             });
         },
         [savedArticles, actionSheet, getToken, theme],
@@ -135,7 +137,9 @@ export default function SavedScreen() {
                                   }
                                 : { flexGrow: 1, paddingBottom: TAB_BAR_INSET }
                         }
-                        ListEmptyComponent={<SavedEmptyState scale={scale} styles={styles} />}
+                        ListEmptyComponent={
+                            <SavedEmptyState scale={scale} styles={styles} theme={theme} />
+                        }
                         renderItem={({ item }) => (
                             <NewsCard
                                 title={item.title}
@@ -146,6 +150,7 @@ export default function SavedScreen() {
                                 source={item.source}
                                 source_domain={item.source_domain}
                                 url={item.url}
+                                read={Boolean(item.read_at)}
                                 handleEllipsisPress={handleEllipsisPress}
                             />
                         )}

@@ -104,6 +104,15 @@ const MIGRATIONS: Migration[] = [
             await db.execAsync('UPDATE articles SET save_synced = 0 WHERE saved = 1');
         },
     },
+    {
+        version: 4,
+        run: async (db) => {
+            await addColumn(db, 'articles', 'read_at', 'TEXT');
+            await db.execAsync(
+                'CREATE INDEX IF NOT EXISTS idx_articles_read_at ON articles(read_at);',
+            );
+        },
+    },
 ];
 
 async function getUserVersion(db: SQLiteDatabase): Promise<number> {

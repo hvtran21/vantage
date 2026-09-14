@@ -1,10 +1,11 @@
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { useFonts } from 'expo-font';
 import { router } from 'expo-router';
 import { useAuth } from '@clerk/expo';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { initializeDatabase } from '@/lib/database';
+import { useTheme, type Theme } from '@/components/Theme';
 
 const checkFirstLaunch = async () => {
     try {
@@ -21,6 +22,8 @@ const checkFirstLaunch = async () => {
 };
 
 export default function Main() {
+    const theme = useTheme();
+    const styles = useMemo(() => makeStyles(theme), [theme]);
     const [fontsLoaded] = useFonts({
         'WorkSans-Regular': require('../assets/fonts/WorkSans/WorkSans-Regular.ttf'),
         'WorkSans-Bold': require('../assets/fonts/WorkSans/WorkSans-Bold.ttf'),
@@ -52,16 +55,17 @@ export default function Main() {
 
     return (
         <View style={styles.container}>
-            <ActivityIndicator size="small" color="#06B6D4" />
+            <ActivityIndicator size="small" color={theme.accent} />
         </View>
     );
 }
 
-const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: '#050505',
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-});
+const makeStyles = (theme: Theme) =>
+    StyleSheet.create({
+        container: {
+            flex: 1,
+            backgroundColor: theme.bg,
+            justifyContent: 'center',
+            alignItems: 'center',
+        },
+    });

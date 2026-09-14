@@ -16,7 +16,7 @@ import { router } from 'expo-router';
 import { useSignIn, useSignUp } from '@clerk/expo';
 import { LinearGradient } from 'expo-linear-gradient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useTheme, type Theme } from '@/components/Theme';
+import { accentGradient, useTheme, type Theme } from '@/components/Theme';
 import { useHaptics } from '@/components/Haptics';
 
 type Mode = 'sign-in' | 'sign-up';
@@ -177,13 +177,13 @@ export default function SignInPage() {
                                 style={styles.submit_button}
                             >
                                 <LinearGradient
-                                    colors={['#06B6D4', '#0891B2']}
+                                    colors={accentGradient(theme)}
                                     start={{ x: 0, y: 0 }}
                                     end={{ x: 1, y: 1 }}
                                     style={styles.submit_gradient}
                                 >
                                     {submitting ? (
-                                        <ActivityIndicator color="white" />
+                                        <ActivityIndicator color={theme.on_accent} />
                                     ) : (
                                         <Text style={styles.submit_text}>
                                             {pendingVerification ? 'Verify' : 'Continue'}
@@ -286,7 +286,7 @@ const makeStyles = (theme: Theme) =>
         submit_text: {
             fontFamily: 'WorkSans-SemiBold',
             fontSize: 17,
-            color: 'white',
+            color: theme.on_accent,
         },
         toggle: {
             marginTop: 20,

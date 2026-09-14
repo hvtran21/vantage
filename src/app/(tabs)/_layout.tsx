@@ -160,7 +160,9 @@ function CustomTabBar({ state, descriptors, navigation }: CustomTabBarProps) {
                             accessibilityLabel={label}
                             // A bounded ripple would square off the pill's rounded ends.
                             android_ripple={{
-                                color: 'rgba(255, 255, 255, 0.10)',
+                                color: theme.dark
+                                    ? 'rgba(255, 255, 255, 0.10)'
+                                    : 'rgba(15, 23, 32, 0.08)',
                                 borderless: true,
                                 radius: 46,
                             }}

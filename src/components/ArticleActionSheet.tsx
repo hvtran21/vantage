@@ -36,12 +36,15 @@ import {
     faBan,
     faFlag,
     faBookmark as faBookmarkSolid,
+    faEnvelopeOpen,
+    faEnvelope,
 } from '@fortawesome/free-solid-svg-icons';
 import { faBookmark as faBookmarkOutline } from '@fortawesome/free-regular-svg-icons';
 import { useAuth } from '@clerk/expo';
 import Article from '@/lib/constants';
 import { domainForArticle } from '@/lib/domain';
 import { blockSource, reportSource } from '@/lib/sources';
+import { markArticleRead, markArticleUnread } from '@/lib/readState';
 import { useTheme, type Theme } from '@/components/Theme';
 import { useMotion } from '@/components/Motion';
 import { useHaptics } from '@/components/Haptics';
@@ -63,6 +66,8 @@ export type ActionSheetRequest = {
     onOpenInBrowser: () => void;
     /** Lets the calling list drop the publisher's rows without a reload. */
     onBlocked?: (domain: string) => void;
+    /** The sheet owns the SQLite write; the list just mirrors the outcome. */
+    onReadChange?: (id: string, readAt: string | null) => void;
 };
 
 type ActionSheetApi = {
@@ -158,6 +163,7 @@ function computePosition(
 export function ActionSheetProvider({ children }: { children: ReactNode }) {
     const [request, setRequest] = useState<ActionSheetRequest | null>(null);
     const [saved, setSaved] = useState(false);
+    const [read, setRead] = useState(false);
     const [position, setPosition] = useState<Position | null>(null);
     const insets = useSafeAreaInsets();
     const { width: screenWidth, height: screenHeight } = useWindowDimensions();
@@ -191,6 +197,7 @@ export function ActionSheetProvider({ children }: { children: ReactNode }) {
         (next: ActionSheetRequest) => {
             closing.current = false;
             setSaved(next.saved);
+            setRead(Boolean(next.article.read_at));
             setRequest(next);
             setPosition(null);
             progress.value = 0;
@@ -253,6 +260,23 @@ export function ActionSheetProvider({ children }: { children: ReactNode }) {
         [request, isSignedIn, getToken],
     );
 
+    const handleToggleRead = useCallback(
+        (target: Article, next: boolean) => {
+            const notify = request?.onReadChange;
+            setRead(next);
+            (async () => {
+                if (next) {
+                    const readAt = await markArticleRead(target.id);
+                    notify?.(target.id, readAt);
+                } else {
+                    await markArticleUnread(target.id);
+                    notify?.(target.id, null);
+                }
+            })().catch((error) => console.warn('[sheet] read toggle failed:', error));
+        },
+        [request],
+    );
+
     const handleReport = useCallback(
         (target: string) => {
             const notify = request?.onBlocked;
@@ -286,7 +310,18 @@ export function ActionSheetProvider({ children }: { children: ReactNode }) {
                     label="Open in browser"
                     onPress={() => {
                         haptics.light();
+                        // Handing off to the browser counts as reading it.
+                        if (!read) handleToggleRead(request.article, true);
                         request.onOpenInBrowser();
+                        close();
+                    }}
+                />
+                <ActionRow
+                    icon={read ? faEnvelope : faEnvelopeOpen}
+                    label={read ? 'Mark as unread' : 'Mark as read'}
+                    onPress={() => {
+                        haptics.selection();
+                        handleToggleRead(request.article, !read);
                         close();
                     }}
                 />

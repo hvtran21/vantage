@@ -85,6 +85,7 @@ interface CardFrontProps {
     url?: string | null;
     /** The first card in a feed gets a bigger photo and title; everything else is the standard row. */
     variant?: 'standard' | 'lead';
+    read?: boolean;
 }
 
 const fallBackImage = require('@/assets/images/computer_2.jpg');
@@ -118,15 +119,19 @@ type SourceRowProps = {
 
 function TagRow({
     styles,
+    theme,
     topicColor,
     label,
     time,
+    read,
     trailing,
 }: {
     styles: ReturnType<typeof makeCardStyle>;
+    theme: Theme;
     topicColor: { color: string; bg: string };
     label: string;
     time: string;
+    read?: boolean;
     trailing?: ReactNode;
 }) {
     return (
@@ -135,6 +140,12 @@ function TagRow({
                 <Text style={[styles.tag_text, { color: topicColor.color }]}>{label}</Text>
             </View>
             <Text style={styles.time_text}>{time}</Text>
+            {read && (
+                <View style={styles.read_marker}>
+                    <FontAwesomeIcon icon={faCheck} size={8} color={theme.text_tertiary} />
+                    <Text style={styles.read_marker_text}>Read</Text>
+                </View>
+            )}
             {trailing && (
                 <>
                     <View style={styles.tag_row_spacer} />
@@ -194,6 +205,7 @@ export const NewsCard = ({
     source_domain,
     url,
     variant = 'standard',
+    read = false,
 }: CardFrontProps) => {
     const [imageError, setImageError] = useState(false);
     const { scale } = useMotion();
@@ -226,7 +238,7 @@ export const NewsCard = ({
             >
                 <View style={styles.card_top} />
                 <TouchableOpacity onPress={handleCardPress} activeOpacity={0.85}>
-                    <View style={styles.lead_photo_frame}>
+                    <View style={[styles.lead_photo_frame, read && styles.photo_read]}>
                         <Image
                             source={imageSource}
                             alt="Article thumbnail"
@@ -239,9 +251,11 @@ export const NewsCard = ({
                     <View style={styles.lead_body}>
                         <TagRow
                             styles={styles}
+                            theme={theme}
                             topicColor={topicColor}
                             label={label}
                             time={time}
+                            read={read}
                             trailing={
                                 <EllipsisButton
                                     theme={theme}
@@ -250,7 +264,10 @@ export const NewsCard = ({
                                 />
                             }
                         />
-                        <Text style={styles.lead_title} numberOfLines={3}>
+                        <Text
+                            style={[styles.lead_title, read && styles.title_read]}
+                            numberOfLines={3}
+                        >
                             {title}
                         </Text>
                         <SourceRow
@@ -274,8 +291,15 @@ export const NewsCard = ({
             <View style={styles.card_top} />
             <TouchableOpacity onPress={handleCardPress} activeOpacity={0.85} style={styles.row}>
                 <View style={styles.col}>
-                    <TagRow styles={styles} topicColor={topicColor} label={label} time={time} />
-                    <Text style={styles.card_title} numberOfLines={3}>
+                    <TagRow
+                        styles={styles}
+                        theme={theme}
+                        topicColor={topicColor}
+                        label={label}
+                        time={time}
+                        read={read}
+                    />
+                    <Text style={[styles.card_title, read && styles.title_read]} numberOfLines={3}>
                         {title}
                     </Text>
                     <SourceRow
@@ -287,7 +311,7 @@ export const NewsCard = ({
                     />
                 </View>
 
-                <View style={styles.thumbnail_frame}>
+                <View style={[styles.thumbnail_frame, read && styles.photo_read]}>
                     <Image
                         source={imageSource}
                         alt="Article thumbnail"
@@ -365,6 +389,25 @@ const makeCardStyle = (theme: Theme) =>
         time_text: {
             fontFamily: 'WorkSans-Light',
             fontSize: 12,
+            color: theme.text_tertiary,
+        },
+        // Read cards step back instead of vanishing; hiding them outright is the
+        // separate opt-in in the feed options.
+        title_read: {
+            color: theme.text_tertiary,
+        },
+        photo_read: {
+            opacity: 0.45,
+        },
+        read_marker: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 4,
+        },
+        read_marker_text: {
+            fontFamily: 'WorkSans-Regular',
+            fontSize: 11,
+            letterSpacing: 0.2,
             color: theme.text_tertiary,
         },
         card_title: {

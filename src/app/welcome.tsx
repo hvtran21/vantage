@@ -8,7 +8,7 @@ import Animated, { FadeIn, FadeInDown, FadeInUp } from 'react-native-reanimated'
 import { LinearGradient } from 'expo-linear-gradient';
 import { initializeDatabase } from '@/lib/database';
 import { addInterest } from '@/lib/interests';
-import { getTopicColor, useTheme, type Theme } from '@/components/Theme';
+import { accentGradient, getTopicColor, hexToRgba, useTheme, type Theme } from '@/components/Theme';
 import { useMotion } from '@/components/Motion';
 import { useHaptics } from '@/components/Haptics';
 import { scaleMs, withMotion } from '@/lib/motion';
@@ -67,7 +67,7 @@ export default function WelcomePage() {
         <SafeAreaProvider>
             <SafeAreaView style={welcomeStyles.theme} edges={['top', 'left', 'right', 'bottom']}>
                 <LinearGradient
-                    colors={['rgba(6, 182, 212, 0.06)', 'transparent']}
+                    colors={[hexToRgba(theme.accent, 0.06), 'transparent']}
                     style={welcomeStyles.bg_gradient}
                     start={{ x: 0.5, y: 0 }}
                     end={{ x: 0.5, y: 0.5 }}
@@ -175,13 +175,17 @@ export default function WelcomePage() {
                         style={welcomeStyles.submit_button}
                     >
                         <LinearGradient
-                            colors={['#06B6D4', '#0891B2']}
+                            colors={accentGradient(theme)}
                             start={{ x: 0, y: 0 }}
                             end={{ x: 1, y: 1 }}
                             style={welcomeStyles.submit_gradient}
                         >
                             <Text style={welcomeStyles.submit_text}>Get started</Text>
-                            <FontAwesomeIcon icon={faArrowRight} size={16} color="white" />
+                            <FontAwesomeIcon
+                                icon={faArrowRight}
+                                size={16}
+                                color={theme.on_accent}
+                            />
                         </LinearGradient>
                     </TouchableOpacity>
 
@@ -298,7 +302,7 @@ const makeWelcomeStyles = (theme: Theme) =>
         submit_text: {
             fontFamily: 'WorkSans-SemiBold',
             fontSize: 17,
-            color: 'white',
+            color: theme.on_accent,
         },
         selection_count: {
             fontFamily: 'WorkSans-Light',
