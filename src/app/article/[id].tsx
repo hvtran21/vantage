@@ -1,5 +1,5 @@
 import { useLocalSearchParams, router } from 'expo-router';
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
     View,
     Text,
@@ -41,6 +41,10 @@ import Animated, { FadeIn, FadeInDown, FadeInUp } from 'react-native-reanimated'
 
 const fallBackImage = require('@/assets/images/computer_2.jpg');
 
+// Opening a card and backing straight out is a miss, not a read. Long enough to
+// rule that out, short enough that a genuine glance at the headline counts.
+const READ_DWELL_MS = 2000;
+
 // Best-effort domain for display only. Falls back to the raw url if parsing fails.
 function getHostname(url: string): string {
     return url
@@ -57,6 +61,7 @@ export default function ArticleDetail() {
     const [showBrowserModal, setShowBrowserModal] = useState(false);
     const [showSourceInfoModal, setShowSourceInfoModal] = useState(false);
     const pendingBrowserUrl = useRef<string | null>(null);
+    const readTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
     const insets = useSafeAreaInsets();
     const { scale } = useMotion();
     const haptics = useHaptics();
@@ -64,23 +69,46 @@ export default function ArticleDetail() {
     const theme = useTheme();
     const styles = useMemo(() => makeStyles(theme), [theme]);
 
+    // Fire-and-forget: a failed stamp costs the reader nothing.
+    const stampRead = useCallback((articleId: string) => {
+        if (readTimer.current) {
+            clearTimeout(readTimer.current);
+            readTimer.current = null;
+        }
+        markArticleRead(articleId).catch((error) =>
+            console.warn('[read] could not mark article read:', error),
+        );
+    }, []);
+
     useEffect(() => {
-        const loadArticle = async () => {
+        if (!id) return;
+        // The load is async, so the screen can unmount before it resolves --
+        // without this the timer would be scheduled after the cleanup ran and
+        // stamp an article that was already backed out of.
+        let cancelled = false;
+
+        (async () => {
             const db = await getDb();
             const result = (await db.getFirstAsync('SELECT * FROM articles WHERE id = ?', [
                 id,
             ])) as Article;
-            if (result) {
-                setArticle(result);
-                setSaved(result.saved === 1);
-                // Fire-and-forget: a failed stamp costs the reader nothing.
-                markArticleRead(result.id).catch((error) =>
-                    console.warn('[read] could not mark article read:', error),
-                );
+            if (cancelled || !result) return;
+            setArticle(result);
+            setSaved(result.saved === 1);
+            readTimer.current = setTimeout(() => {
+                readTimer.current = null;
+                stampRead(result.id);
+            }, READ_DWELL_MS);
+        })();
+
+        return () => {
+            cancelled = true;
+            if (readTimer.current) {
+                clearTimeout(readTimer.current);
+                readTimer.current = null;
             }
         };
-        if (id) loadArticle();
-    }, [id]);
+    }, [id, stampRead]);
 
     const handleSave = async () => {
         if (!article) return;
@@ -117,6 +145,8 @@ export default function ArticleDetail() {
     const handleConfirmOpenInBrowser = () => {
         if (!article) return;
         haptics.light();
+        // Committing to the browser is a read whether or not the dwell elapsed.
+        stampRead(article.id);
         pendingBrowserUrl.current = article.url;
         setShowBrowserModal(false);
         if (Platform.OS === 'android') {
