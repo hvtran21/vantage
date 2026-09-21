@@ -16,6 +16,8 @@ type TabBarScrollApi = {
     collapse: SharedValue<number>;
     /** Spread onto a scrollable screen's FlatList/ScrollView `onScroll`. */
     onScroll: ScrollHandler;
+    /** Opens the bar back up without a scroll -- the collapsed puck taps this. */
+    expand: () => void;
     /**
      * Spread all three onto the same list -- they work as a set. A drag can
      * end with (`onMomentumScrollBegin`/`onMomentumScrollEnd` follow) or
@@ -58,6 +60,11 @@ export function TabBarScrollProvider({ children }: { children: ReactNode }) {
 
         return {
             collapse,
+            expand: () => {
+                clearPending();
+                nearTop.current = false;
+                settleTo(0);
+            },
             onScroll: (event) => {
                 const y = event.nativeEvent.contentOffset.y;
                 const delta = y - lastY.current;

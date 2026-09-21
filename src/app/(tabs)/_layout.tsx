@@ -1,21 +1,22 @@
-import { useEffect, useMemo, useRef, useState, type ComponentProps } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ComponentProps } from 'react';
 import { Tabs } from 'expo-router';
 import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
 import { faHome, faBookmark, faUser } from '@fortawesome/free-solid-svg-icons';
 import {
-    View,
     Text,
     Pressable,
     StyleSheet,
     Platform,
     I18nManager,
-    type LayoutChangeEvent,
+    useWindowDimensions,
 } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, {
     Extrapolation,
     interpolate,
+    runOnJS,
+    useAnimatedReaction,
     useAnimatedStyle,
     useSharedValue,
     withSpring,
@@ -30,10 +31,18 @@ import { TabBarScrollProvider, useTabBarScroll } from '@/components/TabBarScroll
 
 const INDICATOR_INSET = 6;
 const SLIDE = { damping: 18, stiffness: 190, mass: 0.6 };
-// How much smaller the bar gets at full collapse -- shrinks everything
-// (icons, labels, padding, border) together via transform so nothing gets
-// cut off, it's just proportionally smaller.
-const COLLAPSED_SCALE = 0.82;
+
+// Collapsed, the bar is a puck holding just the active tab's icon, anchored to
+// the leading edge so the feed runs out from under it. The row inside keeps its
+// full width the whole way and gets clipped, rather than reflowing three items
+// into 56pt.
+const SIDE_INSET = 20;
+const BAR_HEIGHT = 72;
+const BAR_RADIUS = 26;
+const PUCK_SIZE = 56;
+// The row is gone before the puck arrives, so the two never overlap mid-swap.
+const ROW_FADE = [0, 0.45] as const;
+const PUCK_FADE = [0.5, 1] as const;
 
 // dimezisBlurView only became dependable in API 31; below that it can no-op.
 const ANDROID_BLUR = Platform.OS === 'android' && Number(Platform.Version) >= 31;
@@ -48,16 +57,28 @@ type CustomTabBarProps = Parameters<NonNullable<ComponentProps<typeof Tabs>['tab
 // bottom padding that can't be overridden cleanly, so we own the layout instead.
 function CustomTabBar({ state, descriptors, navigation }: CustomTabBarProps) {
     const insets = useSafeAreaInsets();
+    const { width: screenWidth } = useWindowDimensions();
     const theme = useTheme();
     const tab_styles = useMemo(() => makeTabStyles(theme), [theme]);
-    const [pillWidth, setPillWidth] = useState(0);
-    const itemWidth = pillWidth ? pillWidth / state.routes.length : 0;
+
+    const expandedWidth = Math.max(PUCK_SIZE, screenWidth - SIDE_INSET * 2);
+    const itemWidth = expandedWidth / state.routes.length;
 
     const indicatorX = useSharedValue(0);
     const lastItemWidth = useRef(0);
-    const { collapse } = useTabBarScroll();
+    const { collapse, expand } = useTabBarScroll();
     const haptics = useHaptics();
     const { scale } = useMotion();
+
+    // Reanimated can't hand pointerEvents to a style, and the clipped row must
+    // stop taking taps once the puck is on top of it.
+    const [collapsed, setCollapsed] = useState(false);
+    useAnimatedReaction(
+        () => collapse.value > 0.5,
+        (isCollapsed, was) => {
+            if (isCollapsed !== was) runOnJS(setCollapsed)(isCollapsed);
+        },
+    );
 
     useEffect(() => {
         if (!itemWidth) return;
@@ -82,28 +103,56 @@ function CustomTabBar({ state, descriptors, navigation }: CustomTabBarProps) {
         transform: [{ translateX: indicatorX.value }],
     }));
 
-    // Scales the whole bar down at once -- icons, labels, padding and border
-    // all shrink together, so nothing gets clipped, it just gets smaller.
     const barStyle = useAnimatedStyle(() => ({
+        width: interpolate(collapse.value, [0, 1], [expandedWidth, PUCK_SIZE], Extrapolation.CLAMP),
+        height: interpolate(collapse.value, [0, 1], [BAR_HEIGHT, PUCK_SIZE], Extrapolation.CLAMP),
+        borderRadius: interpolate(
+            collapse.value,
+            [0, 1],
+            [BAR_RADIUS, PUCK_SIZE / 2],
+            Extrapolation.CLAMP,
+        ),
+    }));
+
+    const pillStyle = useAnimatedStyle(() => ({
+        borderRadius: interpolate(
+            collapse.value,
+            [0, 1],
+            [BAR_RADIUS, PUCK_SIZE / 2],
+            Extrapolation.CLAMP,
+        ),
+    }));
+
+    const rowStyle = useAnimatedStyle(() => ({
+        opacity: interpolate(collapse.value, ROW_FADE, [1, 0], Extrapolation.CLAMP),
+    }));
+
+    const puckStyle = useAnimatedStyle(() => ({
+        opacity: interpolate(collapse.value, PUCK_FADE, [0, 1], Extrapolation.CLAMP),
         transform: [
-            {
-                scale: interpolate(
-                    collapse.value,
-                    [0, 1],
-                    [1, COLLAPSED_SCALE],
-                    Extrapolation.CLAMP,
-                ),
-            },
+            { scale: interpolate(collapse.value, PUCK_FADE, [0.7, 1], Extrapolation.CLAMP) },
         ],
     }));
 
-    const onPillLayout = (event: LayoutChangeEvent) => {
-        setPillWidth(event.nativeEvent.layout.width);
-    };
+    const activeRoute = state.routes[state.index];
+    const activeIcon = descriptors[activeRoute.key].options.tabBarIcon;
+    const activeLabel = descriptors[activeRoute.key].options.title ?? activeRoute.name;
+
+    const onPuckPress = useCallback(() => {
+        haptics.light();
+        expand();
+    }, [haptics, expand]);
 
     return (
-        <Animated.View style={[tab_styles.wrapper, { bottom: insets.bottom + 16 }, barStyle]}>
-            <View style={tab_styles.pill} onLayout={onPillLayout}>
+        <Animated.View
+            style={[
+                tab_styles.wrapper,
+                { bottom: insets.bottom + 16 },
+                I18nManager.isRTL ? { right: SIDE_INSET } : { left: SIDE_INSET },
+                barStyle,
+            ]}
+        >
+            <Animated.View style={[tab_styles.pill, pillStyle]}>
                 {BLURRED && (
                     <BlurView
                         intensity={65}
@@ -119,72 +168,94 @@ function CustomTabBar({ state, descriptors, navigation }: CustomTabBarProps) {
                     style={StyleSheet.absoluteFill}
                 />
 
-                {itemWidth > 0 && (
-                    <Animated.View
-                        pointerEvents="none"
-                        style={[
-                            tab_styles.indicator,
-                            { width: itemWidth - INDICATOR_INSET * 2 },
-                            I18nManager.isRTL
-                                ? { right: INDICATOR_INSET }
-                                : { left: INDICATOR_INSET },
-                            indicatorStyle,
-                        ]}
-                    />
-                )}
-
-                {state.routes.map((route, index) => {
-                    const { options } = descriptors[route.key];
-                    const focused = state.index === index;
-                    const color = focused ? theme.accent : theme.text_tertiary;
-                    const label = options.title ?? route.name;
-
-                    const onPress = () => {
-                        const event = navigation.emit({
-                            type: 'tabPress',
-                            target: route.key,
-                            canPreventDefault: true,
-                        });
-                        if (!focused && !event.defaultPrevented) {
-                            haptics.selection();
-                            navigation.navigate(route.name);
-                        }
-                    };
-
-                    return (
-                        <Pressable
-                            key={route.key}
-                            onPress={onPress}
-                            accessibilityRole="tab"
-                            accessibilityState={{ selected: focused }}
-                            accessibilityLabel={label}
-                            // A bounded ripple would square off the pill's rounded ends.
-                            android_ripple={{
-                                color: theme.dark
-                                    ? 'rgba(255, 255, 255, 0.10)'
-                                    : 'rgba(15, 23, 32, 0.08)',
-                                borderless: true,
-                                radius: 46,
-                            }}
-                            style={({ pressed }) => [
-                                tab_styles.item,
-                                pressed && Platform.OS === 'ios' && { opacity: 0.6 },
+                {/* Fixed width and height so the three items hold their layout
+                    while the pill narrows around them and clips. */}
+                <Animated.View
+                    pointerEvents={collapsed ? 'none' : 'auto'}
+                    style={[tab_styles.row, { width: expandedWidth, height: BAR_HEIGHT }, rowStyle]}
+                >
+                    {itemWidth > 0 && (
+                        <Animated.View
+                            pointerEvents="none"
+                            style={[
+                                tab_styles.indicator,
+                                { width: itemWidth - INDICATOR_INSET * 2 },
+                                I18nManager.isRTL
+                                    ? { right: INDICATOR_INSET }
+                                    : { left: INDICATOR_INSET },
+                                indicatorStyle,
                             ]}
-                        >
-                            {options.tabBarIcon?.({ focused, color, size: 20 })}
-                            <Text
-                                style={[
-                                    tab_styles.label,
-                                    { color },
-                                    focused && tab_styles.label_focused,
+                        />
+                    )}
+
+                    {state.routes.map((route, index) => {
+                        const { options } = descriptors[route.key];
+                        const focused = state.index === index;
+                        const color = focused ? theme.accent : theme.text_tertiary;
+                        const label = options.title ?? route.name;
+
+                        const onPress = () => {
+                            const event = navigation.emit({
+                                type: 'tabPress',
+                                target: route.key,
+                                canPreventDefault: true,
+                            });
+                            if (!focused && !event.defaultPrevented) {
+                                haptics.selection();
+                                navigation.navigate(route.name);
+                            }
+                        };
+
+                        return (
+                            <Pressable
+                                key={route.key}
+                                onPress={onPress}
+                                accessibilityRole="tab"
+                                accessibilityState={{ selected: focused }}
+                                accessibilityLabel={label}
+                                // A bounded ripple would square off the pill's rounded ends.
+                                android_ripple={{
+                                    color: theme.dark
+                                        ? 'rgba(255, 255, 255, 0.10)'
+                                        : 'rgba(15, 23, 32, 0.08)',
+                                    borderless: true,
+                                    radius: 46,
+                                }}
+                                style={({ pressed }) => [
+                                    tab_styles.item,
+                                    pressed && Platform.OS === 'ios' && { opacity: 0.6 },
                                 ]}
                             >
-                                {label}
-                            </Text>
-                        </Pressable>
-                    );
-                })}
-            </View>
+                                {options.tabBarIcon?.({ focused, color, size: 20 })}
+                                <Text
+                                    style={[
+                                        tab_styles.label,
+                                        { color },
+                                        focused && tab_styles.label_focused,
+                                    ]}
+                                >
+                                    {label}
+                                </Text>
+                            </Pressable>
+                        );
+                    })}
+                </Animated.View>
+
+                <Animated.View
+                    pointerEvents={collapsed ? 'auto' : 'none'}
+                    style={[tab_styles.puck, puckStyle]}
+                >
+                    <Pressable
+                        onPress={onPuckPress}
+                        accessibilityRole="button"
+                        accessibilityLabel={`${activeLabel} tab, tap to show all tabs`}
+                        android_ripple={{ color: theme.accent_soft, borderless: true, radius: 28 }}
+                        style={tab_styles.puck_hit}
+                    >
+                        {activeIcon?.({ focused: true, color: theme.accent, size: 22 })}
+                    </Pressable>
+                </Animated.View>
+            </Animated.View>
         </Animated.View>
     );
 }
@@ -233,23 +304,18 @@ export default function TabLayout() {
 const makeTabStyles = (theme: Theme) =>
     StyleSheet.create({
         // Positioned + shadowed here; no overflow so the shadow isn't clipped.
+        // Width, height and radius are animated, so only the anchor lives here.
         wrapper: {
             position: 'absolute',
-            left: 20,
-            right: 20,
-            height: 72,
-            borderRadius: 26,
             shadowColor: '#000',
             shadowOffset: { width: 0, height: 8 },
             shadowOpacity: theme.tab_shadow_opacity,
             shadowRadius: 18,
             elevation: 14,
         },
-        // Clips the blur + rounds the corners; separate from wrapper's shadow.
+        // Clips the blur and the over-wide row; separate from wrapper's shadow.
         pill: {
             flex: 1,
-            flexDirection: 'row',
-            borderRadius: 26,
             overflow: 'hidden',
             borderWidth: StyleSheet.hairlineWidth,
             borderColor: theme.tab_border,
@@ -260,6 +326,24 @@ const makeTabStyles = (theme: Theme) =>
                     : ANDROID_BLUR
                       ? theme.tab_bg
                       : theme.elevated,
+        },
+        row: {
+            flexDirection: 'row',
+        },
+        puck: {
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            justifyContent: 'center',
+            alignItems: 'center',
+        },
+        puck_hit: {
+            width: PUCK_SIZE,
+            height: PUCK_SIZE,
+            justifyContent: 'center',
+            alignItems: 'center',
         },
         indicator: {
             position: 'absolute',
