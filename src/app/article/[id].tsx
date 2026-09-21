@@ -56,6 +56,9 @@ function getHostname(url: string): string {
 export default function ArticleDetail() {
     const { id } = useLocalSearchParams<{ id: string }>();
     const [article, setArticle] = useState<Article | null>(null);
+    // Missing and still-loading were both a null article, so a purged row sat
+    // on "Loading..." forever.
+    const [status, setStatus] = useState<'loading' | 'ready' | 'missing'>('loading');
     const [saved, setSaved] = useState(false);
     const [imageError, setImageError] = useState(false);
     const [showBrowserModal, setShowBrowserModal] = useState(false);
@@ -88,17 +91,28 @@ export default function ArticleDetail() {
         let cancelled = false;
 
         (async () => {
-            const db = await getDb();
-            const result = (await db.getFirstAsync('SELECT * FROM articles WHERE id = ?', [
-                id,
-            ])) as Article;
-            if (cancelled || !result) return;
-            setArticle(result);
-            setSaved(result.saved === 1);
-            readTimer.current = setTimeout(() => {
-                readTimer.current = null;
-                stampRead(result.id);
-            }, READ_DWELL_MS);
+            try {
+                const db = await getDb();
+                const result = await db.getFirstAsync<Article>(
+                    'SELECT * FROM articles WHERE id = ?',
+                    [id],
+                );
+                if (cancelled) return;
+                if (!result) {
+                    setStatus('missing');
+                    return;
+                }
+                setArticle(result);
+                setSaved(result.saved === 1);
+                setStatus('ready');
+                readTimer.current = setTimeout(() => {
+                    readTimer.current = null;
+                    stampRead(result.id);
+                }, READ_DWELL_MS);
+            } catch (error) {
+                console.warn('[article] could not load article:', error);
+                if (!cancelled) setStatus('missing');
+            }
         })();
 
         return () => {
@@ -157,9 +171,43 @@ export default function ArticleDetail() {
     if (!article) {
         return (
             <SafeAreaProvider>
-                <SafeAreaView style={styles.theme}>
+                <SafeAreaView style={styles.theme} edges={['top', 'left', 'right']}>
+                    <View style={styles.placeholder_nav}>
+                        <TouchableOpacity
+                            onPress={() => {
+                                haptics.light();
+                                router.back();
+                            }}
+                            hitSlop={10}
+                            style={styles.placeholder_back}
+                            accessibilityRole="button"
+                            accessibilityLabel="Go back"
+                        >
+                            <FontAwesomeIcon icon={faArrowLeft} size={16} color={theme.text} />
+                        </TouchableOpacity>
+                    </View>
                     <View style={styles.loading_container}>
-                        <Text style={styles.loading_text}>Loading...</Text>
+                        {status === 'loading' ? (
+                            <Text style={styles.loading_text}>Loading...</Text>
+                        ) : (
+                            <>
+                                <Text style={styles.missing_title}>Article unavailable</Text>
+                                <Text style={styles.missing_body}>
+                                    It is not in your offline cache. Articles are dropped after four
+                                    days, and blocking a publisher clears its stories too.
+                                </Text>
+                                <TouchableOpacity
+                                    onPress={() => {
+                                        haptics.light();
+                                        router.back();
+                                    }}
+                                    style={styles.missing_button}
+                                    activeOpacity={0.8}
+                                >
+                                    <Text style={styles.missing_button_text}>Back to feed</Text>
+                                </TouchableOpacity>
+                            </>
+                        )}
                     </View>
                 </SafeAreaView>
             </SafeAreaProvider>
@@ -486,6 +534,49 @@ const makeStyles = (theme: Theme) =>
             fontFamily: 'WorkSans-Light',
             fontSize: 16,
             color: theme.text_tertiary,
+        },
+        placeholder_nav: {
+            paddingHorizontal: 20,
+            paddingTop: 12,
+        },
+        placeholder_back: {
+            width: 36,
+            height: 36,
+            borderRadius: 18,
+            backgroundColor: theme.surface,
+            borderWidth: StyleSheet.hairlineWidth,
+            borderColor: theme.border,
+            justifyContent: 'center',
+            alignItems: 'center',
+        },
+        missing_title: {
+            fontFamily: 'WorkSans-SemiBold',
+            fontSize: 19,
+            color: theme.text,
+            marginBottom: 8,
+            textAlign: 'center',
+        },
+        missing_body: {
+            fontFamily: 'WorkSans-Regular',
+            fontSize: 14,
+            lineHeight: 21,
+            color: theme.text_secondary,
+            textAlign: 'center',
+            paddingHorizontal: 32,
+        },
+        missing_button: {
+            marginTop: 22,
+            paddingVertical: 12,
+            paddingHorizontal: 22,
+            borderRadius: 14,
+            backgroundColor: theme.accent_soft,
+            borderWidth: 1,
+            borderColor: theme.accent_border,
+        },
+        missing_button_text: {
+            fontFamily: 'WorkSans-SemiBold',
+            fontSize: 14,
+            color: theme.accent,
         },
         hero_wrapper: {
             width: '100%',

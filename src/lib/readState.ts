@@ -31,15 +31,6 @@ export async function markArticleUnread(id: string): Promise<void> {
     await db.runAsync('UPDATE articles SET read_at = NULL WHERE id = ?', [id]);
 }
 
-/** id -> read_at, for reconciling a list already in memory. Absent means unread. */
-export async function getReadStamps(): Promise<Map<string, string>> {
-    const db = await getDb();
-    const rows = await db.getAllAsync<{ id: string; read_at: string }>(
-        'SELECT id, read_at FROM articles WHERE read_at IS NOT NULL',
-    );
-    return new Map(rows.map((row) => [row.id, row.read_at]));
-}
-
 export async function countReadArticles(): Promise<number> {
     const db = await getDb();
     const row = await db.getFirstAsync<{ total: number }>(

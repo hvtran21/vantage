@@ -20,7 +20,6 @@ import { useAuth } from '@clerk/expo';
 import { useActionSheet, type AnchorRect } from '@/components/ArticleActionSheet';
 import { useTabBarScroll } from '@/components/TabBarScroll';
 import { useSwipeTabGesture } from '@/components/SwipeTabs';
-import { getDb } from '@/lib/database';
 import { saveArticle, unsaveArticle } from '@/lib/savedArticles';
 import { NewsCard } from '@/components/NewsCard';
 import { useFeedOptionsSheet } from '@/components/FeedOptionsSheet';
@@ -32,12 +31,13 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import Article from '@/lib/constants';
 import { openArticleBrowser } from '@/lib/browser';
 import { getInterests } from '@/lib/interests';
-import { getHideRead, getReadStamps, setHideRead } from '@/lib/readState';
+import { getHideRead, setHideRead } from '@/lib/readState';
 import getArticles, {
     syncArticles,
     getAllArticles,
     searchArticles,
     cursorAfter,
+    getCachedArticleStates,
     type LocalCursor,
 } from '@/lib/services';
 import { deleteArticlesByAge, canRefreshArticles } from '@/lib/utilities';
@@ -490,20 +490,17 @@ export default function HomeFeed() {
             // The sheet reads `saved` straight from list state now, so refresh it
             // in case the article screen changed it while we were away.
             (async () => {
-                const db = await getDb();
-                const rows = (await db.getAllAsync('SELECT id FROM articles WHERE saved = 1')) as {
-                    id: string;
-                }[];
-                const savedIds = new Set(rows.map((row) => row.id));
-                // Stamped by article/[id] while this list was off-screen.
-                const readAt = await getReadStamps();
+                // Existence too: a row deleted underneath this list used to
+                // stay tappable, opening an article screen with nothing in it.
+                const states = await getCachedArticleStates();
                 setArticles((prev) => {
-                    const next = prev.map((item) => {
-                        const saved = savedIds.has(item.id) ? 1 : 0;
-                        const read_at = readAt.get(item.id) ?? null;
-                        return item.saved === saved && (item.read_at ?? null) === read_at
+                    const live = prev.filter((item) => states.has(item.id));
+                    const next = live.map((item) => {
+                        const state = states.get(item.id)!;
+                        const read_at = state.read_at ?? null;
+                        return item.saved === state.saved && (item.read_at ?? null) === read_at
                             ? item
-                            : { ...item, saved, read_at };
+                            : { ...item, saved: state.saved, read_at };
                     });
                     return hideReadRef.current ? next.filter((item) => !item.read_at) : next;
                 });

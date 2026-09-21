@@ -129,6 +129,20 @@ export default async function getArticles(
     }
 }
 
+/**
+ * saved + read_at for every row still cached. A list held in memory can outlive
+ * the rows behind it, so absence from this map means gone, not merely unread.
+ */
+export async function getCachedArticleStates(): Promise<
+    Map<string, { saved: number; read_at: string | null }>
+> {
+    const db = await getDb();
+    const rows = await db.getAllAsync<{ id: string; saved: number; read_at: string | null }>(
+        'SELECT id, saved, read_at FROM articles',
+    );
+    return new Map(rows.map((row) => [row.id, { saved: row.saved, read_at: row.read_at }]));
+}
+
 export async function getSavedArticles(): Promise<Article[]> {
     const db = await getDb();
     const results = await db.getAllAsync('SELECT * FROM articles WHERE saved = 1');
