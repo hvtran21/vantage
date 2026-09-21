@@ -13,7 +13,7 @@ import {
     type NativeScrollEvent,
     type NativeSyntheticEvent,
 } from 'react-native';
-import { SafeAreaView, SafeAreaProvider } from 'react-native-safe-area-context';
+import { SafeAreaView, SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { GestureDetector } from 'react-native-gesture-handler';
 import { useFocusEffect, router } from 'expo-router';
 import { useAuth } from '@clerk/expo';
@@ -23,7 +23,15 @@ import { useSwipeTabGesture } from '@/components/SwipeTabs';
 import { saveArticle, unsaveArticle } from '@/lib/savedArticles';
 import { NewsCard } from '@/components/NewsCard';
 import { useFeedOptionsSheet } from '@/components/FeedOptionsSheet';
-import { TabHeader, HeaderRule, TAB_BAR_INSET } from '@/components/styles';
+import {
+    TabHeader,
+    HeaderRule,
+    TAB_BAR_INSET,
+    TAB_BAR_GAP,
+    TAB_BAR_HEIGHT,
+    TAB_PUCK_SIZE,
+    TAB_SIDE_INSET,
+} from '@/components/styles';
 import { useTheme, type Theme } from '@/components/Theme';
 import { faCircleXmark, faMagnifyingGlass, faArrowUp } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
@@ -126,6 +134,7 @@ export default function HomeFeed() {
     const actionSheet = useActionSheet();
     const feedOptions = useFeedOptionsSheet();
     const { scale } = useMotion();
+    const insets = useSafeAreaInsets();
     const swipeGesture = useSwipeTabGesture('index');
 
     const [refreshing, setRefreshing] = useState(false);
@@ -175,6 +184,21 @@ export default function HomeFeed() {
 
     // Shares the tab bar's own collapse value, so the search row and the tab
     // bar shrink away and reappear together on the same scroll gesture.
+    // The button sits level with the collapsed puck, and lifts clear of the bar
+    // as it expands -- otherwise it would land on top of the Saved tab during
+    // the long scroll back up, where both are on screen at once.
+    const fabStyle = useAnimatedStyle(() => ({
+        bottom: interpolate(
+            collapse.value,
+            [0, 1],
+            [
+                insets.bottom + TAB_BAR_GAP + TAB_BAR_HEIGHT + TAB_BAR_GAP,
+                insets.bottom + TAB_BAR_GAP,
+            ],
+            Extrapolation.CLAMP,
+        ),
+    }));
+
     const searchBarStyle = useAnimatedStyle(() => ({
         height: interpolate(collapse.value, [0, 1], [CONTROLS_HEIGHT, 0], Extrapolation.CLAMP),
         opacity: interpolate(collapse.value, [0, 1], [1, 0], Extrapolation.CLAMP),
@@ -739,25 +763,30 @@ export default function HomeFeed() {
                             </Animated.View>
                         )}
 
-                        <Animated.View
-                            pointerEvents={showScrollTop ? 'auto' : 'none'}
-                            style={[
-                                fab_styles.container,
-                                { opacity: scrollTopAnim, transform: [{ scale: scrollTopAnim }] },
-                            ]}
+                        <ReAnimated.View
+                            pointerEvents="box-none"
+                            style={[fab_styles.container, fabStyle]}
                         >
-                            <TouchableOpacity
-                                onPress={scrollToTop}
-                                activeOpacity={0.8}
-                                style={fab_styles.button}
+                            <Animated.View
+                                pointerEvents={showScrollTop ? 'auto' : 'none'}
+                                style={{
+                                    opacity: scrollTopAnim,
+                                    transform: [{ scale: scrollTopAnim }],
+                                }}
                             >
-                                <FontAwesomeIcon
-                                    icon={faArrowUp}
-                                    size={16}
-                                    color={theme.on_accent}
-                                />
-                            </TouchableOpacity>
-                        </Animated.View>
+                                <TouchableOpacity
+                                    onPress={scrollToTop}
+                                    activeOpacity={0.8}
+                                    style={fab_styles.button}
+                                >
+                                    <FontAwesomeIcon
+                                        icon={faArrowUp}
+                                        size={18}
+                                        color={theme.on_accent}
+                                    />
+                                </TouchableOpacity>
+                            </Animated.View>
+                        </ReAnimated.View>
                     </View>
                 </SafeAreaView>
             </SafeAreaProvider>
@@ -843,14 +872,14 @@ const makeFabStyles = (theme: Theme) =>
     StyleSheet.create({
         container: {
             position: 'absolute',
-            bottom: 148,
-            right: 20,
+            right: TAB_SIDE_INSET,
             zIndex: 20,
         },
+        // Matches the collapsed puck exactly.
         button: {
-            width: 44,
-            height: 44,
-            borderRadius: 22,
+            width: TAB_PUCK_SIZE,
+            height: TAB_PUCK_SIZE,
+            borderRadius: TAB_PUCK_SIZE / 2,
             backgroundColor: theme.accent,
             justifyContent: 'center',
             alignItems: 'center',

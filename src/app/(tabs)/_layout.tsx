@@ -28,6 +28,12 @@ import { useHaptics } from '@/components/Haptics';
 import { useMotion } from '@/components/Motion';
 import { scaleMs, scaleSpring } from '@/lib/motion';
 import { TabBarScrollProvider, useTabBarScroll } from '@/components/TabBarScroll';
+import {
+    TAB_BAR_GAP,
+    TAB_BAR_HEIGHT as BAR_HEIGHT,
+    TAB_PUCK_SIZE as PUCK_SIZE,
+    TAB_SIDE_INSET as SIDE_INSET,
+} from '@/components/styles';
 
 const INDICATOR_INSET = 6;
 const SLIDE = { damping: 18, stiffness: 190, mass: 0.6 };
@@ -36,10 +42,7 @@ const SLIDE = { damping: 18, stiffness: 190, mass: 0.6 };
 // the leading edge so the feed runs out from under it. The row inside keeps its
 // full width the whole way and gets clipped, rather than reflowing three items
 // into 56pt.
-const SIDE_INSET = 20;
-const BAR_HEIGHT = 72;
 const BAR_RADIUS = 26;
-const PUCK_SIZE = 56;
 // The shape eases in rather than tracking collapse linearly: the first third of
 // the scroll only takes a sliver off the width, so the bar reads as holding on
 // before it commits, and the real travel lands in the back half.
@@ -163,7 +166,7 @@ function CustomTabBar({ state, descriptors, navigation }: CustomTabBarProps) {
         <Animated.View
             style={[
                 tab_styles.wrapper,
-                { bottom: insets.bottom + 16 },
+                { bottom: insets.bottom + TAB_BAR_GAP },
                 I18nManager.isRTL ? { right: SIDE_INSET } : { left: SIDE_INSET },
                 barStyle,
             ]}
