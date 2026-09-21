@@ -32,6 +32,89 @@ type ShadowStyle = {
     elevation: number;
 } | null;
 
+// dark(400)/light(700) per topic -- one rule instead of sixteen decisions.
+// Each hue keeps its identity and just moves down the Tailwind scale for
+// contrast on a white card.
+const DEFAULT_HUES_DARK: Record<string, string> = {
+    'Artificial Intelligence': '#60A5FA',
+    'Machine Learning': '#A78BFA',
+    Apple: '#F472B6',
+    Microsoft: '#34D399',
+    Amazon: '#FBBF24',
+    Google: '#4ADE80',
+    Gaming: '#FB923C',
+    Cybersecurity: '#F87171',
+    'Game development': '#C084FC',
+    Nintendo: '#E879F9',
+    'Space Tech': '#818CF8',
+    Startups: '#FB7185',
+    Blockchain: '#FACC15',
+    Robotics: '#22D3EE',
+    Technology: '#2DD4BF',
+    Top: '#2DD4BF',
+};
+
+const DEFAULT_HUES_LIGHT: Record<string, string> = {
+    'Artificial Intelligence': '#1D4ED8',
+    'Machine Learning': '#6D28D9',
+    Apple: '#BE185D',
+    Microsoft: '#047857',
+    Amazon: '#B45309',
+    Google: '#15803D',
+    Gaming: '#C2410C',
+    Cybersecurity: '#B91C1C',
+    'Game development': '#7E22CE',
+    Nintendo: '#A21CAF',
+    'Space Tech': '#4338CA',
+    Startups: '#BE123C',
+    Blockchain: '#A16207',
+    Robotics: '#0E7490',
+    Technology: '#0F766E',
+    Top: '#0F766E',
+};
+
+// Gruvbox's own seven hues, cycled so no two neighbours in the genre picker
+// match. Four are a step off canonical: on their own tinted pill they sat at
+// 3.0-3.6:1, lifted (dark) or deepened (light) to clear 4:1. That's a lower bar
+// than body text holds to -- gruvbox is low-contrast on purpose.
+const GRUVBOX_HUES_DARK: Record<string, string> = {
+    'Artificial Intelligence': '#93AF9E',
+    'Machine Learning': '#D997A2',
+    Apple: '#8EC07C',
+    Microsoft: '#B8BB26',
+    Amazon: '#FABD2F',
+    Google: '#93AF9E',
+    Gaming: '#FE8723',
+    Cybersecurity: '#FB876A',
+    'Game development': '#D997A2',
+    Nintendo: '#FB876A',
+    'Space Tech': '#93AF9E',
+    Startups: '#8EC07C',
+    Blockchain: '#FABD2F',
+    Robotics: '#B8BB26',
+    Technology: '#8EC07C',
+    Top: '#8EC07C',
+};
+
+const GRUVBOX_HUES_LIGHT: Record<string, string> = {
+    'Artificial Intelligence': '#076678',
+    'Machine Learning': '#8F3F71',
+    Apple: '#407655',
+    Microsoft: '#736E10',
+    Amazon: '#906219',
+    Google: '#076678',
+    Gaming: '#AF3A03',
+    Cybersecurity: '#9D0006',
+    'Game development': '#8F3F71',
+    Nintendo: '#9D0006',
+    'Space Tech': '#076678',
+    Startups: '#407655',
+    Blockchain: '#906219',
+    Robotics: '#736E10',
+    Technology: '#407655',
+    Top: '#407655',
+};
+
 // Lifted dark, not OLED: a card can't lift off pure black. `elevated` is the
 // sheet/tab-pill/chip layer (the design's `surface-2`) -- one step up from
 // `surface`, which is the card itself.
@@ -60,6 +143,8 @@ const darkTheme = {
     tab_border: 'rgba(255, 255, 255, 0.13)',
     tab_glint: 'rgba(255, 255, 255, 0.07)',
     tab_shadow_opacity: 0.45,
+    topic_hues: DEFAULT_HUES_DARK,
+    topic_tint: 0.13,
 };
 
 // Warm reading light, not a cool mirror of dark: a soft paper-cream page
@@ -101,6 +186,8 @@ const lightTheme = {
     tab_border: 'rgba(60, 40, 20, 0.12)',
     tab_glint: 'rgba(255, 253, 249, 0.70)',
     tab_shadow_opacity: 0.16,
+    topic_hues: DEFAULT_HUES_LIGHT,
+    topic_tint: 0.14,
 };
 
 export type Theme = Omit<typeof darkTheme, 'dark'> & { dark: boolean };
@@ -110,58 +197,68 @@ export type Theme = Omit<typeof darkTheme, 'dark'> & { dark: boolean };
 // above: every text/surface pairing here is checked at 4.5:1+.
 const gruvboxDark = {
     dark: true as const,
+    // bg0 / bg1 / bg2 -- gruvbox's own elevation ladder, unchanged.
     bg: '#282828',
     surface: '#3C3836',
     elevated: '#504945',
-    border: 'rgba(235, 219, 178, 0.09)',
-    border_strong: 'rgba(235, 219, 178, 0.16)',
-    text: 'rgba(235, 219, 178, 0.92)',
-    text_secondary: '#BDAE93',
-    text_tertiary: '#A89984',
-    accent: '#83A598',
-    accent_soft: 'rgba(131, 165, 152, 0.14)',
-    accent_border: 'rgba(131, 165, 152, 0.28)',
-    on_accent: '#1D2021',
-    danger: '#FB4934',
-    danger_soft: 'rgba(251, 73, 52, 0.13)',
+    border: 'rgba(235, 219, 178, 0.10)',
+    border_strong: 'rgba(235, 219, 178, 0.18)',
+    // fg1/fg2/fg3, opaque -- these mixed alpha and hex, and fg4 was 4.2:1 on a card.
+    text: '#EBDBB2',
+    text_secondary: '#D5C4A1',
+    text_tertiary: '#BDAE93',
+    // Orange, not the old sage: #83A598 at 14% left the selected tab invisible.
+    accent: '#FE8019',
+    accent_soft: 'rgba(254, 128, 25, 0.16)',
+    accent_border: 'rgba(254, 128, 25, 0.34)',
+    on_accent: '#282828',
+    // Bright red is 3.4:1 on bg1; this lift clears 4.5 while staying in the hue.
+    danger: '#FE7A68',
+    danger_soft: 'rgba(254, 122, 104, 0.14)',
     card_shadow: null as ShadowStyle,
-    card_top: 'rgba(235, 219, 178, 0.05)',
-    scrim: 'rgba(40, 40, 40, 0.86)',
-    tab_bg: 'rgba(80, 73, 69, 0.72)',
-    tab_border: 'rgba(235, 219, 178, 0.16)',
-    tab_glint: 'rgba(235, 219, 178, 0.07)',
+    card_top: 'rgba(235, 219, 178, 0.06)',
+    scrim: 'rgba(29, 32, 33, 0.88)',
+    tab_bg: 'rgba(60, 56, 54, 0.82)',
+    tab_border: 'rgba(235, 219, 178, 0.18)',
+    tab_glint: 'rgba(235, 219, 178, 0.06)',
     tab_shadow_opacity: 0.45,
+    topic_hues: GRUVBOX_HUES_DARK,
+    topic_tint: 0.1,
 };
 
 const gruvboxLight = {
     dark: false as const,
-    bg: '#FBF1C7',
-    surface: '#F9F5D7',
+    // bg0_s / bg0 / bg0_h. The page was bg0 with cards on bg0_h -- two values
+    // apart, so nothing but the shadow said "card".
+    bg: '#F2E5BC',
+    surface: '#FBF1C7',
     elevated: '#F9F5D7',
-    border: 'rgba(60, 56, 54, 0.12)',
-    border_strong: 'rgba(60, 56, 54, 0.20)',
-    text: 'rgba(60, 56, 54, 0.95)',
+    border: 'rgba(60, 56, 54, 0.14)',
+    border_strong: 'rgba(60, 56, 54, 0.22)',
+    text: '#3C3836',
     text_secondary: '#504945',
-    text_tertiary: '#71655A',
-    accent: '#076678',
-    accent_soft: 'rgba(7, 102, 120, 0.12)',
-    accent_border: 'rgba(7, 102, 120, 0.26)',
+    text_tertiary: '#665C54',
+    accent: '#AF3A03',
+    accent_soft: 'rgba(175, 58, 3, 0.12)',
+    accent_border: 'rgba(175, 58, 3, 0.30)',
     on_accent: '#FBF1C7',
     danger: '#9D0006',
     danger_soft: 'rgba(157, 0, 6, 0.10)',
     card_shadow: {
         shadowColor: '#3C3836',
         shadowOffset: { width: 0, height: 10 },
-        shadowOpacity: 0.16,
+        shadowOpacity: 0.14,
         shadowRadius: 24,
         elevation: 6,
     } as ShadowStyle,
     card_top: 'transparent',
-    scrim: 'rgba(251, 241, 199, 0.88)',
-    tab_bg: 'rgba(249, 245, 215, 0.90)',
-    tab_border: 'rgba(60, 56, 54, 0.15)',
+    scrim: 'rgba(242, 229, 188, 0.90)',
+    tab_bg: 'rgba(249, 245, 215, 0.92)',
+    tab_border: 'rgba(60, 56, 54, 0.16)',
     tab_glint: 'rgba(249, 245, 215, 0.70)',
     tab_shadow_opacity: 0.16,
+    topic_hues: GRUVBOX_HUES_LIGHT,
+    topic_tint: 0.1,
 };
 
 export type ThemePreset = 'default' | 'gruvbox';
@@ -300,28 +397,6 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     return <ThemeContext.Provider value={api}>{children}</ThemeContext.Provider>;
 }
 
-// dark(400)/light(700) per topic -- one rule instead of sixteen decisions.
-// Each hue keeps its identity and just moves down the Tailwind scale for
-// contrast on a white card.
-const TOPIC_HUES: Record<string, { dark: string; light: string }> = {
-    'Artificial Intelligence': { dark: '#60A5FA', light: '#1D4ED8' },
-    'Machine Learning': { dark: '#A78BFA', light: '#6D28D9' },
-    Apple: { dark: '#F472B6', light: '#BE185D' },
-    Microsoft: { dark: '#34D399', light: '#047857' },
-    Amazon: { dark: '#FBBF24', light: '#B45309' },
-    Google: { dark: '#4ADE80', light: '#15803D' },
-    Gaming: { dark: '#FB923C', light: '#C2410C' },
-    Cybersecurity: { dark: '#F87171', light: '#B91C1C' },
-    'Game development': { dark: '#C084FC', light: '#7E22CE' },
-    Nintendo: { dark: '#E879F9', light: '#A21CAF' },
-    'Space Tech': { dark: '#818CF8', light: '#4338CA' },
-    Startups: { dark: '#FB7185', light: '#BE123C' },
-    Blockchain: { dark: '#FACC15', light: '#A16207' },
-    Robotics: { dark: '#22D3EE', light: '#0E7490' },
-    Technology: { dark: '#2DD4BF', light: '#0F766E' },
-    Top: { dark: '#2DD4BF', light: '#0F766E' },
-};
-
 export function hexToRgba(hex: string, alpha: number): string {
     const h = hex.replace('#', '');
     const r = parseInt(h.slice(0, 2), 16);
@@ -346,9 +421,6 @@ export function accentGradient(theme: Theme): [string, string] {
 }
 
 export function getTopicColor(topic: string, theme: Theme) {
-    const hue = TOPIC_HUES[topic];
-    const color = hue ? (theme.dark ? hue.dark : hue.light) : theme.accent;
-    // Light pills read a touch washed out at the old 0.1 against the warm
-    // cream surface; 0.14 gives them the same visual weight as dark's 0.13.
-    return { color, bg: hexToRgba(color, theme.dark ? 0.13 : 0.14) };
+    const color = theme.topic_hues[topic] ?? theme.accent;
+    return { color, bg: hexToRgba(color, theme.topic_tint) };
 }
