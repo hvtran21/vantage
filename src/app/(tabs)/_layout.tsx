@@ -40,9 +40,15 @@ const SIDE_INSET = 20;
 const BAR_HEIGHT = 72;
 const BAR_RADIUS = 26;
 const PUCK_SIZE = 56;
-// The row is gone before the puck arrives, so the two never overlap mid-swap.
-const ROW_FADE = [0, 0.45] as const;
-const PUCK_FADE = [0.5, 1] as const;
+// The shape eases in rather than tracking collapse linearly: the first third of
+// the scroll only takes a sliver off the width, so the bar reads as holding on
+// before it commits, and the real travel lands in the back half.
+const SHAPE_STOPS = [0, 0.32, 0.68, 1] as const;
+
+// Labels hold through the subtle phase, and the row is gone before the puck
+// arrives so the two never overlap mid-swap.
+const ROW_FADE = [0.18, 0.62] as const;
+const PUCK_FADE = [0.68, 1] as const;
 
 // dimezisBlurView only became dependable in API 31; below that it can no-op.
 const ANDROID_BLUR = Platform.OS === 'android' && Number(Platform.Version) >= 31;
@@ -104,8 +110,18 @@ function CustomTabBar({ state, descriptors, navigation }: CustomTabBarProps) {
     }));
 
     const barStyle = useAnimatedStyle(() => ({
-        width: interpolate(collapse.value, [0, 1], [expandedWidth, PUCK_SIZE], Extrapolation.CLAMP),
-        height: interpolate(collapse.value, [0, 1], [BAR_HEIGHT, PUCK_SIZE], Extrapolation.CLAMP),
+        width: interpolate(
+            collapse.value,
+            SHAPE_STOPS,
+            [expandedWidth, expandedWidth - 26, expandedWidth * 0.42, PUCK_SIZE],
+            Extrapolation.CLAMP,
+        ),
+        height: interpolate(
+            collapse.value,
+            SHAPE_STOPS,
+            [BAR_HEIGHT, BAR_HEIGHT, BAR_HEIGHT - 8, PUCK_SIZE],
+            Extrapolation.CLAMP,
+        ),
         borderRadius: interpolate(
             collapse.value,
             [0, 1],

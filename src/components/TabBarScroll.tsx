@@ -6,8 +6,10 @@ import { scaleSpring } from '@/lib/motion';
 
 const SETTLE_SPRING = { damping: 22, stiffness: 210, mass: 0.7 };
 
-// Scroll distance for a full expand<->collapse traversal.
-const COLLAPSE_RANGE = 70;
+// Scroll distance for a full expand<->collapse traversal. Generous on purpose:
+// the bar travels a long way now, and at 70 a single flick threw it the whole
+// distance before you could read it as movement.
+const COLLAPSE_RANGE = 150;
 
 type ScrollHandler = (event: NativeSyntheticEvent<NativeScrollEvent>) => void;
 
