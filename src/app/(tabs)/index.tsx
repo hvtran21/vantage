@@ -184,9 +184,8 @@ export default function HomeFeed() {
 
     // Shares the tab bar's own collapse value, so the search row and the tab
     // bar shrink away and reappear together on the same scroll gesture.
-    // The button sits level with the collapsed puck, and lifts clear of the bar
-    // as it expands -- otherwise it would land on top of the Saved tab during
-    // the long scroll back up, where both are on screen at once.
+    // Level with the collapsed puck, lifting clear as the bar expands -- otherwise
+    // it lands on the Saved tab during the long scroll back up.
     const fabStyle = useAnimatedStyle(() => ({
         bottom: interpolate(
             collapse.value,

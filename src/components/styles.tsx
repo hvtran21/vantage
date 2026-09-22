@@ -7,8 +7,8 @@ import { useMotion } from '@/components/Motion';
 import { useTheme, type Theme } from '@/components/Theme';
 import { scaleMs, withMotion } from '@/lib/motion';
 
-// Floating tab bar geometry. Shared because the feed's scroll-to-top button
-// mirrors the collapsed puck exactly -- same size, same baseline.
+// Floating tab bar geometry, shared so the feed's scroll-to-top button can
+// mirror the collapsed puck instead of guessing at it.
 export const TAB_BAR_HEIGHT = 72;
 export const TAB_BAR_GAP = 16;
 export const TAB_SIDE_INSET = 20;

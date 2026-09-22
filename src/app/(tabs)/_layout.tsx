@@ -38,18 +38,13 @@ import {
 const INDICATOR_INSET = 6;
 const SLIDE = { damping: 18, stiffness: 190, mass: 0.6 };
 
-// Collapsed, the bar is a puck holding just the active tab's icon, anchored to
-// the leading edge so the feed runs out from under it. The row inside keeps its
-// full width the whole way and gets clipped, rather than reflowing three items
-// into 56pt.
 const BAR_RADIUS = 26;
-// The shape eases in rather than tracking collapse linearly: the first third of
-// the scroll only takes a sliver off the width, so the bar reads as holding on
-// before it commits, and the real travel lands in the back half.
+
+// Eased rather than linear: the opening third takes only a sliver off the width,
+// so the bar reads as holding on before it commits.
 const SHAPE_STOPS = [0, 0.32, 0.68, 1] as const;
 
-// Labels hold through the subtle phase, and the row is gone before the puck
-// arrives so the two never overlap mid-swap.
+// Disjoint, so the row is gone before the puck arrives.
 const ROW_FADE = [0.18, 0.62] as const;
 const PUCK_FADE = [0.68, 1] as const;
 
@@ -79,8 +74,8 @@ function CustomTabBar({ state, descriptors, navigation }: CustomTabBarProps) {
     const haptics = useHaptics();
     const { scale } = useMotion();
 
-    // Reanimated can't hand pointerEvents to a style, and the clipped row must
-    // stop taking taps once the puck is on top of it.
+    // pointerEvents can't come from an animated style, and the clipped row has to
+    // stop taking taps once the puck covers it.
     const [collapsed, setCollapsed] = useState(false);
     useAnimatedReaction(
         () => collapse.value > 0.5,
