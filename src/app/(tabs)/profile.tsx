@@ -1,10 +1,16 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Switch } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Switch, Alert } from 'react-native';
 import { SafeAreaView, SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureDetector } from 'react-native-gesture-handler';
 import { useFocusEffect, router } from 'expo-router';
 import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
-import { faUser, faCheck, faSignOutAlt, faSignInAlt } from '@fortawesome/free-solid-svg-icons';
+import {
+    faUser,
+    faCheck,
+    faSignOutAlt,
+    faSignInAlt,
+    faTrashCan,
+} from '@fortawesome/free-solid-svg-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useUser, useAuth } from '@clerk/expo';
 import { TabHeader, HeaderRule } from '@/components/styles';
@@ -25,6 +31,7 @@ import {
 } from '@/lib/sources';
 import { getInterests, addInterest, removeInterest, syncInterests } from '@/lib/interests';
 import { clearReadHistory, countReadArticles } from '@/lib/readState';
+import { deleteAccount } from '@/lib/account';
 import { useMotion } from '@/components/Motion';
 import { scaleMs, withMotion, type MotionPreference } from '@/lib/motion';
 import { useHaptics } from '@/components/Haptics';
@@ -520,12 +527,13 @@ function BlockedSources() {
 
 export default function ProfileScreen() {
     const { user } = useUser();
-    const { signOut } = useAuth();
+    const { signOut, getToken } = useAuth();
     const haptics = useHaptics();
     const theme = useTheme();
     const styles = useMemo(() => makeStyles(theme), [theme]);
     const isSignedIn = !!user;
     const swipeGesture = useSwipeTabGesture('profile');
+    const [deleting, setDeleting] = useState(false);
 
     const handleSignOut = async () => {
         haptics.light();
@@ -537,6 +545,37 @@ export default function ProfileScreen() {
     const handleSignIn = () => {
         haptics.light();
         router.push('/sign-in');
+    };
+
+    const handleConfirmDeleteAccount = async () => {
+        haptics.warning();
+        setDeleting(true);
+        const token = await getToken().catch(() => null);
+        if (!token || !(await deleteAccount(token))) {
+            setDeleting(false);
+            Alert.alert("Couldn't delete account", 'Nothing was deleted. Please try again.');
+            return;
+        }
+        // Clerk already deleted the user, so this can throw -- the device still has to sign out.
+        try {
+            await signOut();
+        } catch (error) {
+            console.warn('[profile] sign-out after account deletion failed:', error);
+        }
+        await AsyncStorage.removeItem('skippedAuth');
+        router.replace('/sign-in');
+    };
+
+    const handleDeleteAccount = () => {
+        haptics.light();
+        Alert.alert(
+            'Delete account?',
+            "This permanently deletes your account and everything synced to it: saved articles, blocked sources, and interests. It can't be undone. You can keep using the app signed out.",
+            [
+                { text: 'Cancel', style: 'cancel' },
+                { text: 'Delete', style: 'destructive', onPress: handleConfirmDeleteAccount },
+            ],
+        );
     };
 
     return (
@@ -559,18 +598,36 @@ export default function ProfileScreen() {
                                 signedIn={isSignedIn}
                             />
                             {isSignedIn ? (
-                                <TouchableOpacity
-                                    style={styles.sign_out_button}
-                                    onPress={handleSignOut}
-                                    activeOpacity={0.7}
-                                >
-                                    <FontAwesomeIcon
-                                        icon={faSignOutAlt}
-                                        size={14}
-                                        color={theme.danger}
-                                    />
-                                    <Text style={styles.sign_out_text}>Sign out</Text>
-                                </TouchableOpacity>
+                                <>
+                                    <TouchableOpacity
+                                        style={styles.sign_out_button}
+                                        onPress={handleSignOut}
+                                        activeOpacity={0.7}
+                                        disabled={deleting}
+                                    >
+                                        <FontAwesomeIcon
+                                            icon={faSignOutAlt}
+                                            size={14}
+                                            color={theme.danger}
+                                        />
+                                        <Text style={styles.sign_out_text}>Sign out</Text>
+                                    </TouchableOpacity>
+                                    <TouchableOpacity
+                                        style={styles.sign_out_button}
+                                        onPress={handleDeleteAccount}
+                                        activeOpacity={0.7}
+                                        disabled={deleting}
+                                    >
+                                        <FontAwesomeIcon
+                                            icon={faTrashCan}
+                                            size={14}
+                                            color={theme.danger}
+                                        />
+                                        <Text style={styles.sign_out_text}>
+                                            {deleting ? 'Deleting...' : 'Delete account'}
+                                        </Text>
+                                    </TouchableOpacity>
+                                </>
                             ) : (
                                 <TouchableOpacity
                                     style={styles.sign_out_button}
