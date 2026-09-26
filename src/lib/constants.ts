@@ -15,4 +15,8 @@ export default interface Article {
     source_domain?: string | null;
     // When this article was opened on this device; null means unread.
     read_at?: string | null;
+    // Refreshed on every fetch. The server renumbers clusters when it
+    // reclusters, so an id only groups rows fetched around the same time.
+    cluster_id?: string | null;
+    source_count?: number | null;
 }

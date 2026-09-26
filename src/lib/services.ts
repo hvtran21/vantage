@@ -223,12 +223,20 @@ async function searchArticlesRemote(query: string, token?: string) {
 export async function cacheArticles(articles: Article[]): Promise<number> {
     const db = await getDb();
     const statement = await db.prepareAsync(
-        'INSERT OR IGNORE INTO articles(id, genre, category, source, author, title, description, url, url_to_image, published_at, content, saved, source_domain) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        'INSERT OR IGNORE INTO articles(id, genre, category, source, author, title, description, url, url_to_image, published_at, content, saved, source_domain, cluster_id, source_count) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    );
+    // A cached row keeps its saved/read state, but its story keeps growing as
+    // outlets pick it up, so only these two columns follow the server. Saved
+    // snapshots come back without them and leave the cached values alone.
+    const refreshStory = await db.prepareAsync(
+        'UPDATE articles SET cluster_id = ?, source_count = ? WHERE id = ? AND (cluster_id IS NOT ? OR source_count IS NOT ?)',
     );
 
     let insertedCount = 0;
     try {
         for (const article of articles) {
+            const clusterId = article.cluster_id ?? null;
+            const sourceCount = article.source_count ?? null;
             const result = await statement.executeAsync([
                 article.id,
                 article.genre ?? null,
@@ -244,11 +252,23 @@ export async function cacheArticles(articles: Article[]): Promise<number> {
                 0,
                 // The API sends this; fall back for anything older.
                 article.source_domain ?? extractDomain(article.url) ?? null,
+                clusterId,
+                sourceCount,
             ]);
             if (result.changes > 0) insertedCount++;
+            else if (article.cluster_id !== undefined) {
+                await refreshStory.executeAsync([
+                    clusterId,
+                    sourceCount,
+                    article.id,
+                    clusterId,
+                    sourceCount,
+                ]);
+            }
         }
     } finally {
         await statement.finalizeAsync();
+        await refreshStory.finalizeAsync();
     }
     return insertedCount;
 }
