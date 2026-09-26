@@ -45,6 +45,7 @@ import Article from '@/lib/constants';
 import { domainForArticle } from '@/lib/domain';
 import { blockSource, reportSource } from '@/lib/sources';
 import { markArticleRead, markArticleUnread } from '@/lib/readState';
+import { shareArticle, shareIcon } from '@/lib/share';
 import { useTheme, type Theme } from '@/components/Theme';
 import { useMotion } from '@/components/Motion';
 import { useHaptics } from '@/components/Haptics';
@@ -313,6 +314,15 @@ export function ActionSheetProvider({ children }: { children: ReactNode }) {
                         // Handing off to the browser counts as reading it.
                         if (!read) handleToggleRead(request.article, true);
                         request.onOpenInBrowser();
+                        close();
+                    }}
+                />
+                <ActionRow
+                    icon={shareIcon}
+                    label="Share"
+                    onPress={() => {
+                        haptics.light();
+                        shareArticle(request.article);
                         close();
                     }}
                 />

@@ -29,6 +29,7 @@ import { openArticleBrowser } from '@/lib/browser';
 import { getDb } from '@/lib/database';
 import { saveArticle, unsaveArticle } from '@/lib/savedArticles';
 import { markArticleRead } from '@/lib/readState';
+import { shareArticle, shareIcon } from '@/lib/share';
 import { formatDate } from '@/components/NewsCard';
 import { getTopicColor, hexToRgba, useTheme, type Theme } from '@/components/Theme';
 import { stripHtml } from '@/lib/utilities';
@@ -378,13 +379,26 @@ export default function ArticleDetail() {
                         <FontAwesomeIcon icon={faArrowLeft} size={16} color="white" />
                     </TouchableOpacity>
 
-                    <TouchableOpacity onPress={handleSave} hitSlop={10} style={styles.nav_btn}>
-                        <FontAwesomeIcon
-                            icon={saved ? faBookmarkSolid : faBookmarkOutline}
-                            size={16}
-                            color={saved ? theme.accent : 'white'}
-                        />
-                    </TouchableOpacity>
+                    <View style={styles.nav_group}>
+                        <TouchableOpacity
+                            onPress={() => {
+                                haptics.light();
+                                shareArticle(article);
+                            }}
+                            hitSlop={10}
+                            accessibilityLabel="Share"
+                            style={styles.nav_btn}
+                        >
+                            <FontAwesomeIcon icon={shareIcon} size={16} color="white" />
+                        </TouchableOpacity>
+                        <TouchableOpacity onPress={handleSave} hitSlop={10} style={styles.nav_btn}>
+                            <FontAwesomeIcon
+                                icon={saved ? faBookmarkSolid : faBookmarkOutline}
+                                size={16}
+                                color={saved ? theme.accent : 'white'}
+                            />
+                        </TouchableOpacity>
+                    </View>
                 </View>
 
                 <Modal
@@ -612,6 +626,10 @@ const makeStyles = (theme: Theme) =>
             alignItems: 'center',
             paddingHorizontal: 16,
             paddingVertical: 12,
+        },
+        nav_group: {
+            flexDirection: 'row',
+            gap: 12,
         },
         nav_btn: {
             width: 40,
