@@ -161,18 +161,24 @@ export async function getCachedArticles(ids: string[], filters?: FeedFilters): P
     return ids.flatMap((id) => byId.get(id) ?? []);
 }
 
+type CachedArticleState = { saved: number; read_at: string | null; cluster_id: string | null };
+
 /**
- * saved + read_at for every row still cached. A list held in memory can outlive
- * the rows behind it, so absence from this map means gone, not merely unread.
+ * saved + read_at (and the story, for story-level Hide read) for every row still
+ * cached. A list held in memory can outlive the rows behind it, so absence from
+ * this map means gone, not merely unread.
  */
-export async function getCachedArticleStates(): Promise<
-    Map<string, { saved: number; read_at: string | null }>
-> {
+export async function getCachedArticleStates(): Promise<Map<string, CachedArticleState>> {
     const db = await getDb();
-    const rows = await db.getAllAsync<{ id: string; saved: number; read_at: string | null }>(
-        'SELECT id, saved, read_at FROM articles',
+    const rows = await db.getAllAsync<CachedArticleState & { id: string }>(
+        'SELECT id, saved, read_at, cluster_id FROM articles',
     );
-    return new Map(rows.map((row) => [row.id, { saved: row.saved, read_at: row.read_at }]));
+    return new Map(
+        rows.map((row) => [
+            row.id,
+            { saved: row.saved, read_at: row.read_at, cluster_id: row.cluster_id },
+        ]),
+    );
 }
 
 export async function getSavedArticles(): Promise<Article[]> {

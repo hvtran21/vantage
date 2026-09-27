@@ -124,12 +124,9 @@ export function initialOf(name: string): string {
 }
 
 /** "The Verge, MacRumors +1": two names, then how many more. */
-export function stackLabel(publishers: StoryPublisher[]): string {
-    const [first, second] = publishers;
-    const rest = publishers.length - 2;
-    return rest > 0
-        ? `${first.source}, ${second.source} +${rest}`
-        : `${first.source}, ${second.source}`;
+export function stackLabel(names: string[]): string {
+    const rest = names.length - 2;
+    return rest > 0 ? `${names[0]}, ${names[1]} +${rest}` : `${names[0]}, ${names[1]}`;
 }
 
 /** The same article with a just-blocked publisher gone from its story. */
@@ -141,17 +138,19 @@ export function withoutPublisher<T extends Article>(article: T, domain: string):
 }
 
 /**
- * Drops a blocked publisher from every cached story it's in, so chips stop
- * naming it before the next fetch recomputes them on the server.
+ * Drops blocked publishers from every cached story they're in, so chips stop
+ * naming them before the next fetch recomputes stories on the server. One pass
+ * for any number of domains, since syncs hand over the whole blocklist.
  */
-export async function forgetPublisher(domain: string): Promise<void> {
+export async function forgetPublishers(domains: string[]): Promise<void> {
+    if (domains.length === 0) return;
     const db = await getDb();
     const rows = await db.getAllAsync<Article>(
-        'SELECT * FROM articles WHERE story_sources LIKE ?',
-        [`%${JSON.stringify(domain)}%`],
+        `SELECT * FROM articles WHERE ${domains.map(() => 'story_sources LIKE ?').join(' OR ')}`,
+        domains.map((domain) => `%${JSON.stringify(domain)}%`),
     );
     for (const row of rows) {
-        const next = withoutPublisher(row, domain);
+        const next = domains.reduce((article, domain) => withoutPublisher(article, domain), row);
         if (next === row) continue;
         await db.runAsync('UPDATE articles SET story_sources = ?, source_count = ? WHERE id = ?', [
             JSON.stringify(next.story_sources),

@@ -98,7 +98,7 @@ const fallBackImage = require('@/assets/images/computer_2.jpg');
 
 function SourceRow({ theme, styles, source, source_domain, url }: SourceRowProps) {
     const domain = domainForArticle({ source_domain, url: url ?? null });
-    const publisher = getPublisherLabel(domain);
+    const publisher = getPublisherLabel(domain, source);
     const label = publisher?.name ?? source;
     if (!label) return null;
 
@@ -126,11 +126,11 @@ type SourceRowProps = {
 // Stands in for the source row once a story has a second outlet.
 function PublisherStack({
     styles,
-    publishers,
+    names,
     onPress,
 }: {
     styles: ReturnType<typeof makeCardStyle>;
-    publishers: StoryPublisher[];
+    names: string[];
     onPress: () => void;
 }) {
     const haptics = useHaptics();
@@ -146,20 +146,20 @@ function PublisherStack({
             hitSlop={{ top: 10, bottom: 10 }}
             style={styles.stack_row}
             accessibilityRole="button"
-            accessibilityLabel={`${publishers.length} sources covered this story. Show them.`}
+            accessibilityLabel={`${names.length} sources covered this story. Show them.`}
         >
             <View style={styles.stack_discs}>
-                {publishers.slice(0, 3).map((publisher, index) => (
+                {names.slice(0, 3).map((name, index) => (
                     <View
-                        key={publisher.source}
+                        key={`${index}-${name}`}
                         style={[styles.stack_disc, index > 0 && styles.stack_disc_overlap]}
                     >
-                        <Text style={styles.stack_initial}>{initialOf(publisher.source)}</Text>
+                        <Text style={styles.stack_initial}>{initialOf(name)}</Text>
                     </View>
                 ))}
             </View>
             <Text style={styles.stack_label} numberOfLines={1}>
-                {stackLabel(publishers)}
+                {stackLabel(names)}
             </Text>
         </TouchableOpacity>
     );
@@ -266,12 +266,22 @@ export const NewsCard = ({
         () => storyPublishers({ source: source ?? '', source_domain, story_sources }),
         [source, source_domain, story_sources],
     );
+    // Through the same labels as SourceRow, so an outlet reads alike either way.
+    const publisherNames = useMemo(
+        () =>
+            publishers.map(
+                (publisher) =>
+                    getPublisherLabel(publisher.source_domain, publisher.source)?.name ??
+                    publisher.source,
+            ),
+        [publishers],
+    );
 
     const sourceLine =
         onSourcesPress && publishers.length > 1 ? (
             <PublisherStack
                 styles={styles}
-                publishers={publishers}
+                names={publisherNames}
                 onPress={() => onSourcesPress(id, publishers)}
             />
         ) : (

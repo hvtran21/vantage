@@ -74,6 +74,8 @@ const CONTROLS_HEIGHT = 66;
 
 // The window Top ranks stories over.
 const TOP_HOURS = 48;
+// Hide read can empty whole pages of Top; this many are tried before giving up.
+const TOP_PAGE_TRIES = 3;
 
 // Cursor pagination needs a single genre or category. CSV "Home" selections
 // keep the existing first-batch-only behavior. Top pages from the server.
@@ -170,8 +172,11 @@ export default function HomeFeed() {
     const [networkCursors, setNetworkCursors] = useState<Record<string, string | null>>({});
 
     // Top is ranked on the server, so it pages with the API's story cursor
-    // rather than a local one; null once the last page is in.
+    // rather than a local one; null once the last page is in. Each reload
+    // bumps the epoch, so a next page still in flight from before it can't
+    // move the new list's cursor.
     const topCursor = useRef<string | null>(null);
+    const topEpoch = useRef(0);
     // Clerk's getToken isn't referentially stable; loadByFilter must be.
     const getTokenRef = useRef(getToken);
     getTokenRef.current = getToken;
@@ -258,23 +263,32 @@ export default function HomeFeed() {
     }, []);
 
     const loadTop = useCallback(async (more: boolean): Promise<Article[]> => {
-        if (!more) topCursor.current = null;
-        else if (!topCursor.current) return [];
-
+        if (!more) {
+            topEpoch.current++;
+            topCursor.current = null;
+        } else if (!topCursor.current) {
+            return [];
+        }
+        const epoch = topEpoch.current;
         const token = (await getTokenRef.current()) ?? undefined;
-        const page = await fetchStories({
-            hours: TOP_HOURS,
-            limit: PAGE_SIZE,
-            cursor: topCursor.current ?? undefined,
-            token,
-        });
-        // A failed page keeps the cursor, so the next scroll retries it.
-        if (!page) return [];
-        topCursor.current = page.nextCursor;
-        return getCachedArticles(
-            page.stories.map((story) => story.article.id),
-            { hideRead: hideReadRef.current },
-        );
+
+        for (let tries = 0; tries < TOP_PAGE_TRIES; tries++) {
+            const page = await fetchStories({
+                hours: TOP_HOURS,
+                limit: PAGE_SIZE,
+                cursor: topCursor.current ?? undefined,
+                token,
+            });
+            // A failed page keeps the cursor, so the next scroll retries it.
+            if (!page || (more && epoch !== topEpoch.current)) return [];
+            topCursor.current = page.nextCursor;
+            const shown = await getCachedArticles(
+                page.stories.map((story) => story.article.id),
+                { hideRead: hideReadRef.current },
+            );
+            if (shown.length > 0 || !page.nextCursor) return shown;
+        }
+        return [];
     }, []);
 
     // Top can come back short (read stories dropped) with more still on the server.
@@ -291,8 +305,7 @@ export default function HomeFeed() {
             if (activeFilter === 'Recent') {
                 return await getAllArticles(PAGE_SIZE, from, filters);
             } else if (activeFilter === 'Top') {
-                // `from` only marks a next page; Top keeps its own cursor.
-                return loadTop(from !== undefined);
+                return loadTop(false);
             }
             if (userPreferences) {
                 return (
@@ -358,7 +371,9 @@ export default function HomeFeed() {
 
         setLoadingMore(true);
         try {
-            let nextBatch = await loadByFilter(filter, cursor);
+            // Top's next page comes from its own cursor, not the local one.
+            let nextBatch =
+                filter === 'Top' ? await loadTop(true) : await loadByFilter(filter, cursor);
 
             // Local cache ran out, try a network top-up before giving up.
             if (nextBatch.length < PAGE_SIZE) {
@@ -408,7 +423,17 @@ export default function HomeFeed() {
             loadingMoreRef.current = false;
             setLoadingMore(false);
         }
-    }, [hasMore, searchOpen, cursor, filter, loadByFilter, networkCursors, getToken, pageIsFull]);
+    }, [
+        hasMore,
+        searchOpen,
+        cursor,
+        filter,
+        loadByFilter,
+        loadTop,
+        networkCursors,
+        getToken,
+        pageIsFull,
+    ]);
 
     const handleToggleHideRead = useCallback(
         (next: boolean) => {
@@ -567,6 +592,12 @@ export default function HomeFeed() {
                 // Existence too: a row deleted underneath this list used to
                 // stay tappable, opening an article screen with nothing in it.
                 const states = await getCachedArticleStates();
+                // Hide read goes by story, as in the feed's SQL: another
+                // outlet's copy read from the sources sheet hides this card too.
+                const readStories = new Set<string>();
+                for (const state of states.values()) {
+                    if (state.read_at && state.cluster_id) readStories.add(state.cluster_id);
+                }
                 setArticles((prev) => {
                     const live = prev.filter((item) => states.has(item.id));
                     const next = live.map((item) => {
@@ -576,7 +607,13 @@ export default function HomeFeed() {
                             ? item
                             : { ...item, saved: state.saved, read_at };
                     });
-                    return hideReadRef.current ? next.filter((item) => !item.read_at) : next;
+                    return hideReadRef.current
+                        ? next.filter(
+                              (item) =>
+                                  !item.read_at &&
+                                  !(item.cluster_id && readStories.has(item.cluster_id)),
+                          )
+                        : next;
                 });
 
                 // Deselected genres drop immediately; newly selected ones wait

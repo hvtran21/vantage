@@ -68,12 +68,18 @@ export function useStorySources(): StorySourcesApi {
     return api;
 }
 
-/** One row per outlet, oldest first; the card's own article speaks for its outlet. */
-function outletRows(sources: Article[], articleId: string): Article[] {
+/**
+ * Each outlet's first report, oldest first, so a repost can't take the First
+ * badge or the start of the timeline away from its own original.
+ */
+function outletRows(sources: Article[]): Article[] {
     const byOutlet = new Map<string, Article>();
     for (const article of sources) {
         const outlet = article.source ?? article.source_domain ?? article.id;
-        if (!byOutlet.has(outlet) || article.id === articleId) byOutlet.set(outlet, article);
+        const seen = byOutlet.get(outlet);
+        if (!seen || Date.parse(article.published_at) < Date.parse(seen.published_at)) {
+            byOutlet.set(outlet, article);
+        }
     }
     return [...byOutlet.values()].sort(
         (a, b) => Date.parse(a.published_at) - Date.parse(b.published_at),
@@ -156,8 +162,8 @@ function OutletRow({
     first: boolean;
     onPress: () => void;
 }) {
-    const publisher = getPublisherLabel(domainForArticle(article));
-    const name = article.source || publisher?.name || '';
+    const publisher = getPublisherLabel(domainForArticle(article), article.source);
+    const name = publisher?.name ?? article.source ?? '';
 
     return (
         <TouchableOpacity
@@ -245,7 +251,7 @@ export function StorySourcesProvider({ children }: { children: ReactNode }) {
                 const story = await fetchArticleStory(next.articleId, token);
                 if (id !== loadId.current) return;
                 if (story) {
-                    setRows(outletRows(story.sources, next.articleId));
+                    setRows(outletRows(story.sources));
                     setStatus('ready');
                 } else {
                     setStatus('error');
