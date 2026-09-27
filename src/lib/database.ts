@@ -113,6 +113,20 @@ const MIGRATIONS: Migration[] = [
             );
         },
     },
+    {
+        version: 5,
+        run: async (db) => {
+            await addColumn(db, 'articles', 'cluster_id', 'TEXT');
+            await addColumn(db, 'articles', 'source_count', 'INTEGER');
+            await db.execAsync(
+                'CREATE INDEX IF NOT EXISTS idx_articles_cluster_id ON articles(cluster_id);',
+            );
+        },
+    },
+    {
+        version: 6,
+        run: (db) => addColumn(db, 'articles', 'story_sources', 'TEXT'),
+    },
 ];
 
 async function getUserVersion(db: SQLiteDatabase): Promise<number> {

@@ -13,8 +13,9 @@ export const BASE_URL = process.env.EXPO_PUBLIC_BASE_URL || 'http://localhost:80
 // the whole predicate NULL for every row, which would silently empty the feed.
 // This form also keeps articles whose own source_domain is null -- they predate
 // the column -- because the inner comparison simply never matches.
-const NOT_BLOCKED =
-    'NOT EXISTS (SELECT 1 FROM blocked_sources b WHERE b.source_domain = articles.source_domain)';
+const notBlocked = (row: string) =>
+    `NOT EXISTS (SELECT 1 FROM blocked_sources b WHERE b.source_domain = ${row}.source_domain)`;
+const NOT_BLOCKED = notBlocked('articles');
 
 /**
  * Position in the local feed, by value rather than by row count.
@@ -34,8 +35,20 @@ const ORDER_BY = `ORDER BY ${ORDER_KEY} DESC, id DESC`;
 const AFTER_CURSOR = `(${ORDER_KEY} < ? OR (${ORDER_KEY} = ? AND id < ?))`;
 
 // In the WHERE clause for the same reason NOT_BLOCKED is: filtering after the
-// LIMIT would return short pages.
-const UNREAD_ONLY = 'read_at IS NULL';
+// LIMIT would return short pages. Reading one outlet's copy reads the story, so
+// another copy doesn't resurface in its place.
+const UNREAD_ONLY = `read_at IS NULL AND (cluster_id IS NULL OR NOT EXISTS (
+    SELECT 1 FROM articles seen
+    WHERE seen.cluster_id = articles.cluster_id AND seen.read_at IS NOT NULL))`;
+
+// One card per story: a row shows only while nothing newer from its story
+// passes the same filter, written against `newer`.
+const newestInStory = (filter: string) => `(cluster_id IS NULL OR NOT EXISTS (
+    SELECT 1 FROM articles newer
+    WHERE newer.cluster_id = articles.cluster_id AND ${filter}
+      AND (COALESCE(newer.published_at, '') > COALESCE(articles.published_at, '')
+           OR (COALESCE(newer.published_at, '') = COALESCE(articles.published_at, '')
+               AND newer.id > articles.id))))`;
 
 export type FeedFilters = { hideRead?: boolean };
 
@@ -113,34 +126,59 @@ export default async function getArticles(
         return db.getAllAsync<Article>(
             `SELECT * FROM articles
              WHERE genre IN (${placeholders}) AND ${NOT_BLOCKED} ${readClause(filters)}
+             AND ${newestInStory(`newer.genre IN (${placeholders}) AND ${notBlocked('newer')}`)}
              ${cursorClause(cursor)}
              ${ORDER_BY} LIMIT ?`,
-            [...genreList, ...cursorParams(cursor), limit],
+            [...genreList, ...genreList, ...cursorParams(cursor), limit],
         );
     }
 
     if (category !== undefined && genres === undefined) {
         return db.getAllAsync<Article>(
             `SELECT * FROM articles
-             WHERE category = ? AND ${NOT_BLOCKED} ${readClause(filters)} ${cursorClause(cursor)}
+             WHERE category = ? AND ${NOT_BLOCKED} ${readClause(filters)}
+             AND ${newestInStory(`newer.category = ? AND ${notBlocked('newer')}`)}
+             ${cursorClause(cursor)}
              ${ORDER_BY} LIMIT ?`,
-            [category, ...cursorParams(cursor), limit],
+            [category, category, ...cursorParams(cursor), limit],
         );
     }
 }
 
 /**
- * saved + read_at for every row still cached. A list held in memory can outlive
- * the rows behind it, so absence from this map means gone, not merely unread.
+ * Cached rows for these ids in the order given, less blocked publishers and,
+ * with Hide read, read stories. For lists the server orders, like Top.
  */
-export async function getCachedArticleStates(): Promise<
-    Map<string, { saved: number; read_at: string | null }>
-> {
+export async function getCachedArticles(ids: string[], filters?: FeedFilters): Promise<Article[]> {
+    if (ids.length === 0) return [];
     const db = await getDb();
-    const rows = await db.getAllAsync<{ id: string; saved: number; read_at: string | null }>(
-        'SELECT id, saved, read_at FROM articles',
+    const rows = await db.getAllAsync<Article>(
+        `SELECT * FROM articles
+         WHERE id IN (${ids.map(() => '?').join(', ')}) AND ${NOT_BLOCKED} ${readClause(filters)}`,
+        ids,
     );
-    return new Map(rows.map((row) => [row.id, { saved: row.saved, read_at: row.read_at }]));
+    const byId = new Map(rows.map((row) => [row.id, row]));
+    return ids.flatMap((id) => byId.get(id) ?? []);
+}
+
+type CachedArticleState = { saved: number; read_at: string | null; cluster_id: string | null };
+
+/**
+ * saved + read_at (and the story, for story-level Hide read) for every row still
+ * cached. A list held in memory can outlive the rows behind it, so absence from
+ * this map means gone, not merely unread.
+ */
+export async function getCachedArticleStates(): Promise<Map<string, CachedArticleState>> {
+    const db = await getDb();
+    const rows = await db.getAllAsync<CachedArticleState & { id: string }>(
+        'SELECT id, saved, read_at, cluster_id FROM articles',
+    );
+    return new Map(
+        rows.map((row) => [
+            row.id,
+            { saved: row.saved, read_at: row.read_at, cluster_id: row.cluster_id },
+        ]),
+    );
 }
 
 export async function getSavedArticles(): Promise<Article[]> {
@@ -157,7 +195,8 @@ export async function getAllArticles(
     const db = await getDb();
     const results = await db.getAllAsync(
         `SELECT * FROM articles
-         WHERE ${NOT_BLOCKED} ${readClause(filters)} ${cursorClause(cursor)}
+         WHERE ${NOT_BLOCKED} ${readClause(filters)} AND ${newestInStory(notBlocked('newer'))}
+         ${cursorClause(cursor)}
          ${ORDER_BY} LIMIT ?`,
         [...cursorParams(cursor), limit],
     );
@@ -220,15 +259,27 @@ async function searchArticlesRemote(query: string, token?: string) {
     }
 }
 
+const serializePublishers = (value: Article['story_sources']) =>
+    value == null ? null : typeof value === 'string' ? value : JSON.stringify(value);
+
 export async function cacheArticles(articles: Article[]): Promise<number> {
     const db = await getDb();
     const statement = await db.prepareAsync(
-        'INSERT OR IGNORE INTO articles(id, genre, category, source, author, title, description, url, url_to_image, published_at, content, saved, source_domain) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        'INSERT OR IGNORE INTO articles(id, genre, category, source, author, title, description, url, url_to_image, published_at, content, saved, source_domain, cluster_id, source_count, story_sources) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    );
+    // A cached row keeps its saved/read state, but its story keeps growing as
+    // outlets pick it up, so only the story columns follow the server. Saved
+    // snapshots come back without them and leave the cached values alone.
+    const refreshStory = await db.prepareAsync(
+        'UPDATE articles SET cluster_id = ?, source_count = ?, story_sources = ? WHERE id = ? AND (cluster_id IS NOT ? OR source_count IS NOT ? OR story_sources IS NOT ?)',
     );
 
     let insertedCount = 0;
     try {
         for (const article of articles) {
+            const clusterId = article.cluster_id ?? null;
+            const sourceCount = article.source_count ?? null;
+            const storySources = serializePublishers(article.story_sources);
             const result = await statement.executeAsync([
                 article.id,
                 article.genre ?? null,
@@ -244,11 +295,26 @@ export async function cacheArticles(articles: Article[]): Promise<number> {
                 0,
                 // The API sends this; fall back for anything older.
                 article.source_domain ?? extractDomain(article.url) ?? null,
+                clusterId,
+                sourceCount,
+                storySources,
             ]);
             if (result.changes > 0) insertedCount++;
+            else if (article.cluster_id !== undefined) {
+                await refreshStory.executeAsync([
+                    clusterId,
+                    sourceCount,
+                    storySources,
+                    article.id,
+                    clusterId,
+                    sourceCount,
+                    storySources,
+                ]);
+            }
         }
     } finally {
         await statement.finalizeAsync();
+        await refreshStory.finalizeAsync();
     }
     return insertedCount;
 }

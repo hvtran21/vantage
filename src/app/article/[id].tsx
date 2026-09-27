@@ -221,7 +221,7 @@ export default function ArticleDetail() {
     const label = article.genre || article.category || 'Top';
     const topicColor = getTopicColor(label, theme);
     const domain = domainForArticle(article);
-    const publisher = getPublisherLabel(domain);
+    const publisher = getPublisherLabel(domain, article.source);
     const sourceLabel = publisher?.name ?? article.source;
 
     return (

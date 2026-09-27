@@ -42,7 +42,7 @@ const POP = { damping: 20, stiffness: 300, mass: 0.5 };
 const SHOW_OPTIONS = [
     { key: 'Home', icon: faHouse, hint: 'The topics you picked' },
     { key: 'Recent', icon: faClock, hint: 'Newest first, every topic' },
-    { key: 'Top', icon: faBolt, hint: 'Across all of tech' },
+    { key: 'Top', icon: faBolt, hint: 'Most covered, last 48 hours' },
 ];
 
 const APPEARANCE_OPTIONS: { key: ThemeMode; label: string }[] = [

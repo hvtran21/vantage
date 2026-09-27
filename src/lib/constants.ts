@@ -15,4 +15,13 @@ export default interface Article {
     source_domain?: string | null;
     // When this article was opened on this device; null means unread.
     read_at?: string | null;
+    // Refreshed on every fetch. The server renumbers clusters when it
+    // reclusters, so an id only groups rows fetched around the same time.
+    cluster_id?: string | null;
+    source_count?: number | null;
+    // The story's publishers, oldest report first. An array from the API; a
+    // row read back from the cache holds its JSON text instead.
+    story_sources?: StoryPublisher[] | string | null;
 }
+
+export type StoryPublisher = { source: string; source_domain: string | null };

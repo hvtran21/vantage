@@ -1,7 +1,8 @@
-// NewsAPI returns publisher names as free text -- "Theregister.com",
+// NewsAPI returned publisher names as free text -- "Theregister.com",
 // "9to5google.com" -- so this keys off the normalized domain instead and
-// supplies the real masthead name. Anything absent here just falls back to
-// the bare domain; the list only needs to grow, never be exhaustive.
+// supplies the real masthead name. Anything absent here falls back to the
+// feed's own name, which rss-aggregator keeps clean, then to the bare domain;
+// the list only needs to grow, never be exhaustive.
 const KNOWN_PUBLISHERS: Record<string, string> = {
     'theverge.com': 'The Verge',
     'techcrunch.com': 'TechCrunch',
@@ -56,9 +57,12 @@ const KNOWN_PUBLISHERS: Record<string, string> = {
 
 export type PublisherLabel = { name: string; known: boolean };
 
-/** Known publishers get their real masthead name; everything else, the bare domain. */
-export function getPublisherLabel(domain: string | null | undefined): PublisherLabel | null {
+/** Known publishers get their real masthead name; the rest, the feed's name or the bare domain. */
+export function getPublisherLabel(
+    domain: string | null | undefined,
+    feedName?: string | null,
+): PublisherLabel | null {
     if (!domain) return null;
     const known = KNOWN_PUBLISHERS[domain];
-    return known ? { name: known, known: true } : { name: domain, known: false };
+    return known ? { name: known, known: true } : { name: feedName || domain, known: false };
 }

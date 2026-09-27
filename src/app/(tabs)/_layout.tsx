@@ -48,9 +48,10 @@ const SHAPE_STOPS = [0, 0.32, 0.68, 1] as const;
 const ROW_FADE = [0.18, 0.62] as const;
 const PUCK_FADE = [0.68, 1] as const;
 
-// dimezisBlurView only became dependable in API 31; below that it can no-op.
-const ANDROID_BLUR = Platform.OS === 'android' && Number(Platform.Version) >= 31;
-const BLURRED = Platform.OS === 'ios' || ANDROID_BLUR;
+// expo-blur's Android blur now needs a BlurTargetView behind the bar, and
+// without one it silently draws none, leaving feed text readable through the
+// translucent fill. So only iOS gets the frosted bar; Android stays solid.
+const BLURRED = Platform.OS === 'ios';
 
 // Derived from Tabs itself (rather than imported from @react-navigation/
 // bottom-tabs) because expo-router re-declares this type on its own, and the
@@ -171,7 +172,6 @@ function CustomTabBar({ state, descriptors, navigation }: CustomTabBarProps) {
                     <BlurView
                         intensity={65}
                         tint={theme.dark ? 'dark' : 'light'}
-                        experimentalBlurMethod={ANDROID_BLUR ? 'dimezisBlurView' : undefined}
                         style={StyleSheet.absoluteFill}
                     />
                 )}
@@ -334,12 +334,7 @@ const makeTabStyles = (theme: Theme) =>
             borderWidth: StyleSheet.hairlineWidth,
             borderColor: theme.tab_border,
             // Translucent only where a real blur backs it.
-            backgroundColor:
-                Platform.OS === 'ios'
-                    ? 'transparent'
-                    : ANDROID_BLUR
-                      ? theme.tab_bg
-                      : theme.elevated,
+            backgroundColor: BLURRED ? theme.tab_bg : theme.elevated,
         },
         row: {
             flexDirection: 'row',

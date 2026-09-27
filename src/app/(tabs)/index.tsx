@@ -23,6 +23,7 @@ import { useSwipeTabGesture } from '@/components/SwipeTabs';
 import { saveArticle, unsaveArticle } from '@/lib/savedArticles';
 import { NewsCard } from '@/components/NewsCard';
 import { useFeedOptionsSheet } from '@/components/FeedOptionsSheet';
+import { useStorySources } from '@/components/StorySourcesSheet';
 import {
     TabHeader,
     HeaderRule,
@@ -36,7 +37,8 @@ import { useTheme, type Theme } from '@/components/Theme';
 import { faCircleXmark, faMagnifyingGlass, faArrowUp } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import Article from '@/lib/constants';
+import Article, { type StoryPublisher } from '@/lib/constants';
+import { fetchStories, withoutPublisher } from '@/lib/stories';
 import { openArticleBrowser } from '@/lib/browser';
 import { getInterests } from '@/lib/interests';
 import { getHideRead, setHideRead } from '@/lib/readState';
@@ -45,6 +47,7 @@ import getArticles, {
     getAllArticles,
     searchArticles,
     cursorAfter,
+    getCachedArticles,
     getCachedArticleStates,
     type LocalCursor,
 } from '@/lib/services';
@@ -69,15 +72,17 @@ type NetworkScope = { key: string; genre?: string; category?: string };
 // sat above this row instead of below it.
 const CONTROLS_HEIGHT = 66;
 
+// The window Top ranks stories over.
+const TOP_HOURS = 48;
+// Hide read can empty whole pages of Top; this many are tried before giving up.
+const TOP_PAGE_TRIES = 3;
+
 // Cursor pagination needs a single genre or category. CSV "Home" selections
-// keep the existing first-batch-only behavior.
+// keep the existing first-batch-only behavior. Top pages from the server.
 const getNetworkScope = (
     activeFilter: string,
     userPreferences: string | null,
 ): NetworkScope | null => {
-    if (activeFilter === 'Top') {
-        return { key: 'category:Technology', category: 'Technology' };
-    }
     if (activeFilter === 'Home' && userPreferences && !userPreferences.includes(',')) {
         return { key: `genre:${userPreferences}`, genre: userPreferences };
     }
@@ -133,6 +138,7 @@ export default function HomeFeed() {
 
     const actionSheet = useActionSheet();
     const feedOptions = useFeedOptionsSheet();
+    const storySources = useStorySources();
     const { scale } = useMotion();
     const insets = useSafeAreaInsets();
     const swipeGesture = useSwipeTabGesture('index');
@@ -162,8 +168,18 @@ export default function HomeFeed() {
     // flight then holds a cursor into a result set that no longer exists.
     const feedGeneration = useRef(0);
 
-    // Cursor per scope (see getNetworkScope) so Home's and Top's don't clobber each other.
+    // Cursor per scope (see getNetworkScope) so each genre's paging stays separate.
     const [networkCursors, setNetworkCursors] = useState<Record<string, string | null>>({});
+
+    // Top is ranked on the server, so it pages with the API's story cursor
+    // rather than a local one; null once the last page is in. Each reload
+    // bumps the epoch, so a next page still in flight from before it can't
+    // move the new list's cursor.
+    const topCursor = useRef<string | null>(null);
+    const topEpoch = useRef(0);
+    // Clerk's getToken isn't referentially stable; loadByFilter must be.
+    const getTokenRef = useRef(getToken);
+    getTokenRef.current = getToken;
 
     // Search -- always visible now, so "open" is just "has a query" rather
     // than a separate expand/collapse state.
@@ -246,6 +262,42 @@ export default function HomeFeed() {
         flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
     }, []);
 
+    const loadTop = useCallback(async (more: boolean): Promise<Article[]> => {
+        if (!more) {
+            topEpoch.current++;
+            topCursor.current = null;
+        } else if (!topCursor.current) {
+            return [];
+        }
+        const epoch = topEpoch.current;
+        const token = (await getTokenRef.current()) ?? undefined;
+
+        for (let tries = 0; tries < TOP_PAGE_TRIES; tries++) {
+            const page = await fetchStories({
+                hours: TOP_HOURS,
+                limit: PAGE_SIZE,
+                cursor: topCursor.current ?? undefined,
+                token,
+            });
+            // A failed page keeps the cursor, so the next scroll retries it.
+            if (!page || (more && epoch !== topEpoch.current)) return [];
+            topCursor.current = page.nextCursor;
+            const shown = await getCachedArticles(
+                page.stories.map((story) => story.article.id),
+                { hideRead: hideReadRef.current },
+            );
+            if (shown.length > 0 || !page.nextCursor) return shown;
+        }
+        return [];
+    }, []);
+
+    // Top can come back short (read stories dropped) with more still on the server.
+    const pageIsFull = useCallback(
+        (activeFilter: string, page: Article[]) =>
+            activeFilter === 'Top' ? topCursor.current !== null : page.length >= PAGE_SIZE,
+        [],
+    );
+
     const loadByFilter = useCallback(
         async (activeFilter: string, from?: LocalCursor): Promise<Article[]> => {
             const userPreferences = await AsyncStorage.getItem('genreSelection');
@@ -253,7 +305,7 @@ export default function HomeFeed() {
             if (activeFilter === 'Recent') {
                 return await getAllArticles(PAGE_SIZE, from, filters);
             } else if (activeFilter === 'Top') {
-                return (await getArticles(undefined, 'Technology', PAGE_SIZE, from, filters)) ?? [];
+                return loadTop(false);
             }
             if (userPreferences) {
                 return (
@@ -262,31 +314,27 @@ export default function HomeFeed() {
             }
             return (await getArticles(undefined, 'Technology', PAGE_SIZE, from, filters)) ?? [];
         },
-        [],
+        [loadTop],
     );
 
-    // Prefetches both scopes and records their nextCursor for later load-more.
-    // Home and Top are independent requests, so run them concurrently.
+    // Prefetches Home's genres and the Technology articles Home falls back to
+    // with no interests picked, recording Home's nextCursor for later load-more.
     const syncAndCaptureCursors = useCallback(
         async (userPreferences: string | null) => {
             const token = (await getToken()) ?? undefined;
-            const [homeOutcome, topOutcome] = await Promise.all([
+            const [homeOutcome] = await Promise.all([
                 userPreferences
                     ? syncArticles(userPreferences, undefined, undefined, token)
                     : Promise.resolve(undefined),
                 syncArticles(undefined, 'Technology', undefined, token),
             ]);
 
-            setNetworkCursors((prev) => {
-                const next: Record<string, string | null> = {
+            if (userPreferences && !userPreferences.includes(',')) {
+                setNetworkCursors((prev) => ({
                     ...prev,
-                    'category:Technology': topOutcome?.nextCursor ?? null,
-                };
-                if (userPreferences && !userPreferences.includes(',')) {
-                    next[`genre:${userPreferences}`] = homeOutcome?.nextCursor ?? null;
-                }
-                return next;
-            });
+                    [`genre:${userPreferences}`]: homeOutcome?.nextCursor ?? null,
+                }));
+            }
         },
         [getToken],
     );
@@ -305,7 +353,7 @@ export default function HomeFeed() {
         const newArticles = await loadByFilter(filter);
         feedGeneration.current++;
         setCursor(cursorAfter(newArticles));
-        setHasMore(newArticles.length >= PAGE_SIZE);
+        setHasMore(pageIsFull(filter, newArticles));
         // Mid-search the list belongs to the query, so refresh the feed behind it
         // rather than the visible results.
         if (preSearchArticles.current) {
@@ -314,7 +362,7 @@ export default function HomeFeed() {
             setArticles(newArticles);
         }
         setRefreshing(false);
-    }, [filter, loadByFilter, syncAndCaptureCursors]);
+    }, [filter, loadByFilter, syncAndCaptureCursors, pageIsFull]);
 
     const loadNextPage = useCallback(async () => {
         if (loadingMoreRef.current || !hasMore || searchOpen) return;
@@ -323,7 +371,9 @@ export default function HomeFeed() {
 
         setLoadingMore(true);
         try {
-            let nextBatch = await loadByFilter(filter, cursor);
+            // Top's next page comes from its own cursor, not the local one.
+            let nextBatch =
+                filter === 'Top' ? await loadTop(true) : await loadByFilter(filter, cursor);
 
             // Local cache ran out, try a network top-up before giving up.
             if (nextBatch.length < PAGE_SIZE) {
@@ -356,11 +406,16 @@ export default function HomeFeed() {
             // The list was rebuilt underneath this page -- drop it whole.
             if (generation !== feedGeneration.current) return;
 
-            if (nextBatch.length < PAGE_SIZE) {
+            if (!pageIsFull(filter, nextBatch)) {
                 setHasMore(false);
             }
             if (nextBatch.length > 0) {
-                setArticles((prev) => [...prev, ...nextBatch]);
+                // Top's ranking can shift between pages and hand back a story
+                // that's already showing.
+                setArticles((prev) => {
+                    const shown = new Set(prev.map((item) => item.id));
+                    return [...prev, ...nextBatch.filter((item) => !shown.has(item.id))];
+                });
                 setCursor(cursorAfter(nextBatch));
             }
         } finally {
@@ -368,7 +423,17 @@ export default function HomeFeed() {
             loadingMoreRef.current = false;
             setLoadingMore(false);
         }
-    }, [hasMore, searchOpen, cursor, filter, loadByFilter, networkCursors, getToken]);
+    }, [
+        hasMore,
+        searchOpen,
+        cursor,
+        filter,
+        loadByFilter,
+        loadTop,
+        networkCursors,
+        getToken,
+        pageIsFull,
+    ]);
 
     const handleToggleHideRead = useCallback(
         (next: boolean) => {
@@ -383,10 +448,10 @@ export default function HomeFeed() {
                 feedGeneration.current++;
                 setArticles(reloaded);
                 setCursor(cursorAfter(reloaded));
-                setHasMore(reloaded.length >= PAGE_SIZE);
+                setHasMore(pageIsFull(filterRef.current, reloaded));
             })().catch((error) => console.error('[read] reload after toggle failed:', error));
         },
-        [loadByFilter],
+        [loadByFilter, pageIsFull],
     );
 
     const handleReadChange = useCallback((id: string, readAt: string | null) => {
@@ -427,12 +492,23 @@ export default function HomeFeed() {
                 },
                 onOpenInBrowser: () => openArticleBrowser(article.url, theme),
                 onBlocked: (domain) => {
-                    setArticles((prev) => prev.filter((item) => domainForArticle(item) !== domain));
+                    setArticles((prev) =>
+                        prev
+                            .filter((item) => domainForArticle(item) !== domain)
+                            .map((item) => withoutPublisher(item, domain)),
+                    );
                 },
                 onReadChange: handleReadChange,
             });
         },
         [articles, actionSheet, getToken, theme, handleReadChange],
+    );
+
+    const handleSourcesPress = useCallback(
+        (id: string, publishers: StoryPublisher[]) => {
+            storySources.open({ articleId: id, publishers });
+        },
+        [storySources],
     );
 
     const animateContent = useCallback(() => {
@@ -516,6 +592,12 @@ export default function HomeFeed() {
                 // Existence too: a row deleted underneath this list used to
                 // stay tappable, opening an article screen with nothing in it.
                 const states = await getCachedArticleStates();
+                // Hide read goes by story, as in the feed's SQL: another
+                // outlet's copy read from the sources sheet hides this card too.
+                const readStories = new Set<string>();
+                for (const state of states.values()) {
+                    if (state.read_at && state.cluster_id) readStories.add(state.cluster_id);
+                }
                 setArticles((prev) => {
                     const live = prev.filter((item) => states.has(item.id));
                     const next = live.map((item) => {
@@ -525,7 +607,13 @@ export default function HomeFeed() {
                             ? item
                             : { ...item, saved: state.saved, read_at };
                     });
-                    return hideReadRef.current ? next.filter((item) => !item.read_at) : next;
+                    return hideReadRef.current
+                        ? next.filter(
+                              (item) =>
+                                  !item.read_at &&
+                                  !(item.cluster_id && readStories.has(item.cluster_id)),
+                          )
+                        : next;
                 });
 
                 // Deselected genres drop immediately; newly selected ones wait
@@ -593,7 +681,7 @@ export default function HomeFeed() {
                 feedGeneration.current++;
                 setArticles(filtered);
                 setCursor(cursorAfter(filtered));
-                setHasMore(filtered.length >= PAGE_SIZE);
+                setHasMore(pageIsFull(filter, filtered));
             } catch (error) {
                 console.error(`Error occurred: ${error}`);
             } finally {
@@ -731,8 +819,17 @@ export default function HomeFeed() {
                                                     : 'standard'
                                             }
                                             handleEllipsisPress={handleEllipsisPress}
+                                            story_sources={item.story_sources}
+                                            onSourcesPress={handleSourcesPress}
                                         />
                                     )}
+                                    ListHeaderComponent={
+                                        filter === 'Top' && !searchOpen && articles.length > 0 ? (
+                                            <Text style={search_styles.section_label}>
+                                                Most covered · last {TOP_HOURS} hours
+                                            </Text>
+                                        ) : null
+                                    }
                                     keyExtractor={(item) => item.id}
                                     onEndReached={loadNextPage}
                                     onEndReachedThreshold={0.5}
@@ -864,6 +961,16 @@ const makeSearchStyles = (theme: Theme) =>
             fontFamily: 'WorkSans-SemiBold',
             fontSize: 13,
             color: theme.accent,
+        },
+        section_label: {
+            fontFamily: 'WorkSans-SemiBold',
+            fontSize: 11,
+            letterSpacing: 0.8,
+            textTransform: 'uppercase',
+            color: theme.text_tertiary,
+            paddingHorizontal: 20,
+            paddingTop: 2,
+            paddingBottom: 12,
         },
     });
 
