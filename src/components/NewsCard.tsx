@@ -11,6 +11,9 @@ import { useHaptics } from '@/components/Haptics';
 import { scaleMs, withMotion } from '@/lib/motion';
 import { domainForArticle } from '@/lib/domain';
 import { getPublisherLabel } from '@/lib/publishers';
+import { initialOf, stackLabel, storyPublishers } from '@/lib/stories';
+import type Article from '@/lib/constants';
+import type { StoryPublisher } from '@/lib/constants';
 import type { AnchorRect } from '@/components/ArticleActionSheet';
 
 function formatDate(date: Date): string {
@@ -86,6 +89,9 @@ interface CardFrontProps {
     /** The first card in a feed gets a bigger photo and title; everything else is the standard row. */
     variant?: 'standard' | 'lead';
     read?: boolean;
+    story_sources?: Article['story_sources'];
+    /** Lists the story's outlets. Without it, a story shows its plain source row. */
+    onSourcesPress?: (id: string, publishers: StoryPublisher[]) => void;
 }
 
 const fallBackImage = require('@/assets/images/computer_2.jpg');
@@ -116,6 +122,48 @@ type SourceRowProps = {
     source_domain?: string | null;
     url?: string | null;
 };
+
+// Stands in for the source row once a story has a second outlet.
+function PublisherStack({
+    styles,
+    publishers,
+    onPress,
+}: {
+    styles: ReturnType<typeof makeCardStyle>;
+    publishers: StoryPublisher[];
+    onPress: () => void;
+}) {
+    const haptics = useHaptics();
+
+    return (
+        <TouchableOpacity
+            onPress={() => {
+                haptics.light();
+                Keyboard.dismiss();
+                onPress();
+            }}
+            activeOpacity={0.6}
+            hitSlop={{ top: 10, bottom: 10 }}
+            style={styles.stack_row}
+            accessibilityRole="button"
+            accessibilityLabel={`${publishers.length} sources covered this story. Show them.`}
+        >
+            <View style={styles.stack_discs}>
+                {publishers.slice(0, 3).map((publisher, index) => (
+                    <View
+                        key={publisher.source}
+                        style={[styles.stack_disc, index > 0 && styles.stack_disc_overlap]}
+                    >
+                        <Text style={styles.stack_initial}>{initialOf(publisher.source)}</Text>
+                    </View>
+                ))}
+            </View>
+            <Text style={styles.stack_label} numberOfLines={1}>
+                {stackLabel(publishers)}
+            </Text>
+        </TouchableOpacity>
+    );
+}
 
 function TagRow({
     styles,
@@ -206,12 +254,35 @@ export const NewsCard = ({
     url,
     variant = 'standard',
     read = false,
+    story_sources,
+    onSourcesPress,
 }: CardFrontProps) => {
     const [imageError, setImageError] = useState(false);
     const { scale } = useMotion();
     const haptics = useHaptics();
     const theme = useTheme();
     const styles = useMemo(() => makeCardStyle(theme), [theme]);
+    const publishers = useMemo(
+        () => storyPublishers({ source: source ?? '', source_domain, story_sources }),
+        [source, source_domain, story_sources],
+    );
+
+    const sourceLine =
+        onSourcesPress && publishers.length > 1 ? (
+            <PublisherStack
+                styles={styles}
+                publishers={publishers}
+                onPress={() => onSourcesPress(id, publishers)}
+            />
+        ) : (
+            <SourceRow
+                theme={theme}
+                styles={styles}
+                source={source}
+                source_domain={source_domain}
+                url={url}
+            />
+        );
 
     const time = relativeTime(published_at);
     const imageSource = url_to_image && !imageError ? { uri: url_to_image } : fallBackImage;
@@ -270,13 +341,7 @@ export const NewsCard = ({
                         >
                             {title}
                         </Text>
-                        <SourceRow
-                            theme={theme}
-                            styles={styles}
-                            source={source}
-                            source_domain={source_domain}
-                            url={url}
-                        />
+                        {sourceLine}
                     </View>
                 </TouchableOpacity>
             </Animated.View>
@@ -302,13 +367,7 @@ export const NewsCard = ({
                     <Text style={[styles.card_title, read && styles.title_read]} numberOfLines={3}>
                         {title}
                     </Text>
-                    <SourceRow
-                        theme={theme}
-                        styles={styles}
-                        source={source}
-                        source_domain={source_domain}
-                        url={url}
-                    />
+                    {sourceLine}
                 </View>
 
                 <View style={[styles.thumbnail_frame, read && styles.photo_read]}>
@@ -432,6 +491,46 @@ const makeCardStyle = (theme: Theme) =>
             fontFamily: 'WorkSans-Regular',
             fontSize: 12,
             color: theme.text_tertiary,
+        },
+        stack_row: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            alignSelf: 'flex-start',
+            maxWidth: '100%',
+            gap: 8,
+            marginTop: 10,
+            minHeight: 22,
+        },
+        stack_discs: {
+            flexDirection: 'row',
+            alignItems: 'center',
+        },
+        // The surface-colored ring is what separates each disc from the one it overlaps.
+        stack_disc: {
+            width: 20,
+            height: 20,
+            borderRadius: 10,
+            borderWidth: 1.5,
+            borderColor: theme.surface,
+            backgroundColor: theme.source_disc,
+            justifyContent: 'center',
+            alignItems: 'center',
+        },
+        stack_disc_overlap: {
+            marginLeft: -6,
+        },
+        stack_initial: {
+            fontFamily: 'WorkSans-SemiBold',
+            fontSize: 9.5,
+            lineHeight: 12,
+            color: theme.text_secondary,
+            includeFontPadding: false,
+        },
+        stack_label: {
+            flexShrink: 1,
+            fontFamily: 'WorkSans-SemiBold',
+            fontSize: 12,
+            color: theme.text_secondary,
         },
         // Standard row's ellipsis is horizontal (faEllipsis), whose ink sits in
         // a thin band across the middle of its 14px box rather than filling

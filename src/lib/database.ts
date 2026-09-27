@@ -123,6 +123,10 @@ const MIGRATIONS: Migration[] = [
             );
         },
     },
+    {
+        version: 6,
+        run: (db) => addColumn(db, 'articles', 'story_sources', 'TEXT'),
+    },
 ];
 
 async function getUserVersion(db: SQLiteDatabase): Promise<number> {

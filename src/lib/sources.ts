@@ -1,6 +1,7 @@
 import { getDb } from '@/lib/database';
 import { BASE_URL } from '@/lib/services';
 import { principalHeaders } from '@/lib/principal';
+import { forgetPublisher } from '@/lib/stories';
 
 export interface BlockedSource {
     source_domain: string;
@@ -27,6 +28,7 @@ export async function blockSource(domain: string, token?: string | null): Promis
 
     // Saved articles stay: blocking a publisher shouldn't delete something kept.
     await db.runAsync('DELETE FROM articles WHERE source_domain = ? AND saved = 0', [domain]);
+    await forgetPublisher(domain);
 
     await pushBlock(domain, token);
 }
@@ -138,6 +140,7 @@ export async function syncBlockedSources(token?: string | null): Promise<void> {
             await db.runAsync('DELETE FROM articles WHERE source_domain = ? AND saved = 0', [
                 source.source_domain,
             ]);
+            await forgetPublisher(source.source_domain);
         }
     } catch (error) {
         console.warn('[sources] sync failed:', error);
@@ -200,6 +203,7 @@ export async function replaceLocalBlocklist(token?: string | null): Promise<bool
             await db.runAsync('DELETE FROM articles WHERE source_domain = ? AND saved = 0', [
                 source.source_domain,
             ]);
+            await forgetPublisher(source.source_domain);
         }
         return true;
     } catch (error) {

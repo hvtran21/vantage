@@ -7,6 +7,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ActionSheetProvider } from '@/components/ArticleActionSheet';
 import { FeedOptionsProvider } from '@/components/FeedOptionsSheet';
+import { StorySourcesProvider } from '@/components/StorySourcesSheet';
 import { PrincipalSync } from '@/components/PrincipalSync';
 import { MotionProvider, useMotion } from '@/components/Motion';
 import { HapticsProvider } from '@/components/Haptics';
@@ -62,7 +63,9 @@ export default function RootLayout() {
                                 <HapticsProvider>
                                     <ActionSheetProvider>
                                         <FeedOptionsProvider>
-                                            <AppNavigator />
+                                            <StorySourcesProvider>
+                                                <AppNavigator />
+                                            </StorySourcesProvider>
                                         </FeedOptionsProvider>
                                     </ActionSheetProvider>
                                 </HapticsProvider>

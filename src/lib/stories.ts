@@ -1,5 +1,7 @@
 import type Article from '@/lib/constants';
+import type { StoryPublisher } from '@/lib/constants';
 import { BASE_URL, cacheArticles } from '@/lib/services';
+import { getDb } from '@/lib/database';
 import { principalHeaders } from '@/lib/principal';
 
 export type StorySource = {
@@ -28,7 +30,8 @@ export type ArticleStory = {
     cluster_id: string | null;
     source_count: number;
     article_count: number;
-    sources: StorySource[];
+    /** Whole feed rows, oldest first; each is cached as the story loads. */
+    sources: Article[];
 };
 
 /**
@@ -81,8 +84,79 @@ export async function fetchArticleStory(
             console.error(`[api] Story request failed with status ${response.status}`);
             return;
         }
-        return (await response.json()) as ArticleStory;
+        const story = (await response.json()) as ArticleStory;
+        await cacheArticles(story.sources);
+        return story;
     } catch (error) {
         console.error('[api] fetchArticleStory failed:', error);
+    }
+}
+
+function parsePublishers(value: Article['story_sources']): StoryPublisher[] {
+    if (!value) return [];
+    if (Array.isArray(value)) return value;
+    try {
+        const parsed: unknown = JSON.parse(value);
+        return Array.isArray(parsed) ? (parsed as StoryPublisher[]) : [];
+    } catch {
+        return [];
+    }
+}
+
+/** Everyone covering an article's story, with the article's own publisher first. */
+export function storyPublishers(
+    article: Pick<Article, 'source' | 'source_domain' | 'story_sources'>,
+): StoryPublisher[] {
+    const publishers = parsePublishers(article.story_sources);
+    const own = publishers.findIndex(
+        (p) =>
+            (article.source_domain && p.source_domain === article.source_domain) ||
+            p.source === article.source,
+    );
+    if (own <= 0) return publishers;
+    return [publishers[own], ...publishers.slice(0, own), ...publishers.slice(own + 1)];
+}
+
+/** "V" for The Verge, "9" for 9to5Mac. */
+export function initialOf(name: string): string {
+    const masthead = name.replace(/^the\s+/i, '').trim();
+    return masthead.charAt(0).toUpperCase() || '?';
+}
+
+/** "The Verge, MacRumors +1": two names, then how many more. */
+export function stackLabel(publishers: StoryPublisher[]): string {
+    const [first, second] = publishers;
+    const rest = publishers.length - 2;
+    return rest > 0
+        ? `${first.source}, ${second.source} +${rest}`
+        : `${first.source}, ${second.source}`;
+}
+
+/** The same article with a just-blocked publisher gone from its story. */
+export function withoutPublisher<T extends Article>(article: T, domain: string): T {
+    const publishers = parsePublishers(article.story_sources);
+    const kept = publishers.filter((p) => p.source_domain !== domain);
+    if (kept.length === publishers.length) return article;
+    return { ...article, story_sources: kept, source_count: kept.length || null };
+}
+
+/**
+ * Drops a blocked publisher from every cached story it's in, so chips stop
+ * naming it before the next fetch recomputes them on the server.
+ */
+export async function forgetPublisher(domain: string): Promise<void> {
+    const db = await getDb();
+    const rows = await db.getAllAsync<Article>(
+        'SELECT * FROM articles WHERE story_sources LIKE ?',
+        [`%${JSON.stringify(domain)}%`],
+    );
+    for (const row of rows) {
+        const next = withoutPublisher(row, domain);
+        if (next === row) continue;
+        await db.runAsync('UPDATE articles SET story_sources = ?, source_count = ? WHERE id = ?', [
+            JSON.stringify(next.story_sources),
+            next.source_count ?? null,
+            row.id,
+        ]);
     }
 }
