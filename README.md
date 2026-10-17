@@ -109,7 +109,7 @@ EXPO_PUBLIC_BASE_URL=http://localhost:8000
 
 > On a physical device, replace `localhost` with your machine's LAN IP.
 
-A release build (not `__DEV__`) refuses to start unless `EXPO_PUBLIC_BASE_URL` is an `https://` URL. Run the unit tests with `npm test` in `src`.
+A release build (not `__DEV__`) refuses to start unless `EXPO_PUBLIC_BASE_URL` is an `https://` URL. Run the unit tests with `npm test` in `src`; they need Node 22.18 or newer, which runs TypeScript directly.
 
 ```bash
 npx expo start
