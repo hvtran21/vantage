@@ -10,6 +10,7 @@ import { useMotion } from '@/components/Motion';
 import { useHaptics } from '@/components/Haptics';
 import { scaleMs, withMotion } from '@/lib/motion';
 import { domainForArticle } from '@/lib/domain';
+import { safeImageUri } from '@/lib/imageUri';
 import { getPublisherLabel } from '@/lib/publishers';
 import { initialOf, stackLabel, storyPublishers } from '@/lib/stories';
 import type Article from '@/lib/constants';
@@ -295,15 +296,16 @@ export const NewsCard = ({
         );
 
     const time = relativeTime(published_at);
-    const imageSource = url_to_image && !imageError ? { uri: url_to_image } : fallBackImage;
+    const imageUri = safeImageUri(url_to_image);
+    const imageSource = imageUri && !imageError ? { uri: imageUri } : fallBackImage;
     const label = genre === '' ? 'Top' : genre;
     const topicColor = getTopicColor(label, theme);
 
     useEffect(() => {
-        if (url_to_image) {
-            Image.prefetch(url_to_image, 'disk');
+        if (imageUri) {
+            Image.prefetch(imageUri, 'disk');
         }
-    }, [url_to_image]);
+    }, [imageUri]);
 
     const handleCardPress = () => {
         haptics.light();
