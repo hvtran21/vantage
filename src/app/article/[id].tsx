@@ -34,6 +34,7 @@ import { formatDate } from '@/components/NewsCard';
 import { getTopicColor, hexToRgba, useTheme, type Theme } from '@/components/Theme';
 import { stripHtml } from '@/lib/utilities';
 import { domainForArticle } from '@/lib/domain';
+import { safeImageUri } from '@/lib/imageUri';
 import { getPublisherLabel } from '@/lib/publishers';
 import { useMotion } from '@/components/Motion';
 import { useHaptics } from '@/components/Haptics';
@@ -215,8 +216,8 @@ export default function ArticleDetail() {
         );
     }
 
-    const imageSource =
-        article.url_to_image && !imageError ? { uri: article.url_to_image } : fallBackImage;
+    const imageUri = safeImageUri(article.url_to_image);
+    const imageSource = imageUri && !imageError ? { uri: imageUri } : fallBackImage;
     const date = formatDate(new Date(article.published_at));
     const label = article.genre || article.category || 'Top';
     const topicColor = getTopicColor(label, theme);

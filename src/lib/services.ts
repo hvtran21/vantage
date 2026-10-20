@@ -3,8 +3,10 @@ import { getDb } from '@/lib/database';
 import { updateArticleQueryTime } from '@/lib/utilities';
 import { principalHeaders } from '@/lib/principal';
 import { extractDomain } from '@/lib/domain';
+import { resolveBaseUrl } from '@/lib/baseUrl';
 
-export const BASE_URL = process.env.EXPO_PUBLIC_BASE_URL || 'http://localhost:8081';
+// Throws at import in a release build unless this is an https URL; see lib/baseUrl.ts.
+export const BASE_URL = resolveBaseUrl(process.env.EXPO_PUBLIC_BASE_URL, __DEV__);
 
 // Excluded in the query rather than filtered afterwards, so a LIMIT still
 // returns a full page.
