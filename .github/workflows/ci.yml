@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+
+permissions:
+  contents: read
+
+# A newer push to a PR makes its older run pointless. Pushes to master each keep a result, so
+# they get a group of their own: a shared one would still drop all but the newest pending run.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: src
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: src/package-lock.json
+
+      # The lockfile is written by npm 11; the npm bundled with Node 22 (10) can't install from it.
+      - name: Install npm 11
+        run: npm install -g npm@11
+
+      - name: Install dependencies
+        id: install
+        run: npm ci
+
+      - name: Run tests
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: npm test
+
+      - name: Type-check
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: npx tsc --noEmit
+
+      - name: Lint
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: npx eslint .
