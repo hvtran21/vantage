@@ -553,7 +553,10 @@ export default function ProfileScreen() {
         const token = await getToken().catch(() => null);
         if (!token || !(await deleteAccount(token))) {
             setDeleting(false);
-            Alert.alert("Couldn't delete account", 'Nothing was deleted. Please try again.');
+            Alert.alert(
+                "Couldn't delete account",
+                'Your account is still active. Please try again.',
+            );
             return;
         }
         // Clerk already deleted the user, so this can throw -- the device still has to sign out.
