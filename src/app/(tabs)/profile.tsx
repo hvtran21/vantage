@@ -25,7 +25,7 @@ import {
 import {
     listBlocked,
     listReportedDomains,
-    replaceLocalBlocklist,
+    clearLocalBlocklist,
     syncBlockedSources,
     unblockSource,
     type BlockedSource,
@@ -35,9 +35,9 @@ import {
     addInterest,
     removeInterest,
     syncInterests,
-    replaceLocalInterests,
+    clearLocalInterests,
 } from '@/lib/interests';
-import { replaceLocalSavedArticles } from '@/lib/savedArticles';
+import { clearLocalSavedArticles } from '@/lib/savedArticles';
 import { clearReadHistory, countReadArticles } from '@/lib/readState';
 import { deleteAccount } from '@/lib/account';
 import { useMotion } from '@/components/Motion';
@@ -543,6 +543,8 @@ export default function ProfileScreen() {
     const swipeGesture = useSwipeTabGesture('profile');
     const [deleting, setDeleting] = useState(false);
     const deletingRef = useRef(false);
+    // Bumped to remount the sections that keep their own copy of the synced data.
+    const [sectionsKey, setSectionsKey] = useState(0);
 
     const handleSignOut = async () => {
         haptics.light();
@@ -564,8 +566,8 @@ export default function ProfileScreen() {
         setDeleting(true);
         try {
             const token = await getToken().catch(() => null);
-            const status = token ? await deleteAccount(token) : null;
-            if (status === 204) {
+            const outcome = token ? await deleteAccount(token) : 'failed';
+            if (outcome === 'deleted') {
                 // Clerk already deleted the user, so this can throw -- the device still has to sign out.
                 try {
                     await signOut();
@@ -576,21 +578,20 @@ export default function ProfileScreen() {
                 router.replace('/sign-in');
                 return;
             }
-            if (token && status === 502) {
+            if (outcome === 'partial') {
                 Alert.alert(
                     "Couldn't close account",
                     "Your data was removed, but your account couldn't be closed. Please try again.",
                 );
-                // The server data is gone, so re-pull the device's mirrors. Sequential, not
-                // Promise.all: the first two each open a SQLite transaction on the single shared
-                // connection, and expo-sqlite can't run two at once.
+                // Interests first: if a SQLite clear fails, the remount must not push them back up.
                 try {
-                    await replaceLocalBlocklist(token);
-                    await replaceLocalSavedArticles(token);
-                    await replaceLocalInterests(token);
+                    await clearLocalInterests();
+                    await clearLocalBlocklist();
+                    await clearLocalSavedArticles();
                 } catch (error) {
-                    console.warn('[profile] local refresh after partial deletion failed:', error);
+                    console.warn('[profile] local clear after partial deletion failed:', error);
                 }
+                setSectionsKey((key) => key + 1);
                 return;
             }
             Alert.alert(
@@ -691,9 +692,9 @@ export default function ProfileScreen() {
 
                         <ReadingHistory />
 
-                        <BlockedSources />
+                        <BlockedSources key={`sources-${sectionsKey}`} />
 
-                        <GenrePreferences />
+                        <GenrePreferences key={`interests-${sectionsKey}`} />
                     </ScrollView>
                 </SafeAreaView>
             </SafeAreaProvider>
