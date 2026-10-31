@@ -4,23 +4,23 @@ updates:
     directory: /src
     schedule:
       interval: weekly
-    # Expo pins compatible versions per SDK, so a major bump can pass type-check and lint but still
-    # break the native build.
+    # Expo pins compatible versions per SDK, so a bump past them can pass type-check and lint but
+    # still break the native build. React and React Native are pinned to the minor or exact version.
     ignore:
       - dependency-name: "expo"
         update-types: ["version-update:semver-major"]
       - dependency-name: "expo-*"
         update-types: ["version-update:semver-major"]
       - dependency-name: "react-native"
-        update-types: ["version-update:semver-major"]
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
       - dependency-name: "react-native-*"
-        update-types: ["version-update:semver-major"]
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
       - dependency-name: "@react-native/*"
         update-types: ["version-update:semver-major"]
       - dependency-name: "react"
-        update-types: ["version-update:semver-major"]
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
       - dependency-name: "react-dom"
-        update-types: ["version-update:semver-major"]
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
       - dependency-name: "@react-navigation/*"
         update-types: ["version-update:semver-major"]
   - package-ecosystem: github-actions
