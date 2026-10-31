@@ -109,3 +109,12 @@ export async function replaceLocalInterests(token?: string | null): Promise<bool
         return false;
     }
 }
+
+/**
+ * Drops the device's interests without touching the network, for when the
+ * server side is known to be gone -- the result replaceLocalInterests would
+ * leave after an empty response. Throws on a local write failure.
+ */
+export async function clearLocalInterests(): Promise<void> {
+    await writeLocal([]);
+}

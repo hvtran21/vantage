@@ -1,10 +1,16 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Switch } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Switch, Alert } from 'react-native';
 import { SafeAreaView, SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureDetector } from 'react-native-gesture-handler';
 import { useFocusEffect, router } from 'expo-router';
 import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
-import { faUser, faCheck, faSignOutAlt, faSignInAlt } from '@fortawesome/free-solid-svg-icons';
+import {
+    faUser,
+    faCheck,
+    faSignOutAlt,
+    faSignInAlt,
+    faTrashCan,
+} from '@fortawesome/free-solid-svg-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useUser, useAuth } from '@clerk/expo';
 import { TabHeader, HeaderRule } from '@/components/styles';
@@ -19,12 +25,21 @@ import {
 import {
     listBlocked,
     listReportedDomains,
+    clearLocalBlocklist,
     syncBlockedSources,
     unblockSource,
     type BlockedSource,
 } from '@/lib/sources';
-import { getInterests, addInterest, removeInterest, syncInterests } from '@/lib/interests';
+import {
+    getInterests,
+    addInterest,
+    removeInterest,
+    syncInterests,
+    clearLocalInterests,
+} from '@/lib/interests';
+import { clearLocalSavedArticles } from '@/lib/savedArticles';
 import { clearReadHistory, countReadArticles } from '@/lib/readState';
+import { deleteAccount } from '@/lib/account';
 import { useMotion } from '@/components/Motion';
 import { scaleMs, withMotion, type MotionPreference } from '@/lib/motion';
 import { useHaptics } from '@/components/Haptics';
@@ -520,12 +535,16 @@ function BlockedSources() {
 
 export default function ProfileScreen() {
     const { user } = useUser();
-    const { signOut } = useAuth();
+    const { signOut, getToken } = useAuth();
     const haptics = useHaptics();
     const theme = useTheme();
     const styles = useMemo(() => makeStyles(theme), [theme]);
     const isSignedIn = !!user;
     const swipeGesture = useSwipeTabGesture('profile');
+    const [deleting, setDeleting] = useState(false);
+    const deletingRef = useRef(false);
+    // Bumped to remount the sections that keep their own copy of the synced data.
+    const [sectionsKey, setSectionsKey] = useState(0);
 
     const handleSignOut = async () => {
         haptics.light();
@@ -537,6 +556,64 @@ export default function ProfileScreen() {
     const handleSignIn = () => {
         haptics.light();
         router.push('/sign-in');
+    };
+
+    const handleConfirmDeleteAccount = async () => {
+        // A ref, not `deleting`: state lags a render, and stacked confirm dialogs can both fire.
+        if (deletingRef.current) return;
+        deletingRef.current = true;
+        haptics.warning();
+        setDeleting(true);
+        try {
+            const token = await getToken().catch(() => null);
+            const outcome = token ? await deleteAccount(token) : 'failed';
+            if (outcome === 'deleted') {
+                // Clerk already deleted the user, so this can throw -- the device still has to sign out.
+                try {
+                    await signOut();
+                } catch (error) {
+                    console.warn('[profile] sign-out after account deletion failed:', error);
+                }
+                await AsyncStorage.removeItem('skippedAuth');
+                router.replace('/sign-in');
+                return;
+            }
+            if (outcome === 'partial') {
+                Alert.alert(
+                    "Couldn't close account",
+                    "Your data was removed, but your account couldn't be closed. Please try again.",
+                );
+                // Interests first: if a SQLite clear fails, the remount must not push them back up.
+                try {
+                    await clearLocalInterests();
+                    await clearLocalBlocklist();
+                    await clearLocalSavedArticles();
+                } catch (error) {
+                    console.warn('[profile] local clear after partial deletion failed:', error);
+                }
+                setSectionsKey((key) => key + 1);
+                return;
+            }
+            Alert.alert(
+                "Couldn't delete account",
+                'Your account is still active. Please try again.',
+            );
+        } finally {
+            deletingRef.current = false;
+            setDeleting(false);
+        }
+    };
+
+    const handleDeleteAccount = () => {
+        haptics.light();
+        Alert.alert(
+            'Delete account?',
+            "This permanently deletes your account and everything synced to it: saved articles, blocked sources, reports, and interests. It can't be undone. You can keep using the app signed out.",
+            [
+                { text: 'Cancel', style: 'cancel' },
+                { text: 'Delete', style: 'destructive', onPress: handleConfirmDeleteAccount },
+            ],
+        );
     };
 
     return (
@@ -559,18 +636,36 @@ export default function ProfileScreen() {
                                 signedIn={isSignedIn}
                             />
                             {isSignedIn ? (
-                                <TouchableOpacity
-                                    style={styles.sign_out_button}
-                                    onPress={handleSignOut}
-                                    activeOpacity={0.7}
-                                >
-                                    <FontAwesomeIcon
-                                        icon={faSignOutAlt}
-                                        size={14}
-                                        color={theme.danger}
-                                    />
-                                    <Text style={styles.sign_out_text}>Sign out</Text>
-                                </TouchableOpacity>
+                                <>
+                                    <TouchableOpacity
+                                        style={styles.sign_out_button}
+                                        onPress={handleSignOut}
+                                        activeOpacity={0.7}
+                                        disabled={deleting}
+                                    >
+                                        <FontAwesomeIcon
+                                            icon={faSignOutAlt}
+                                            size={14}
+                                            color={theme.danger}
+                                        />
+                                        <Text style={styles.sign_out_text}>Sign out</Text>
+                                    </TouchableOpacity>
+                                    <TouchableOpacity
+                                        style={styles.sign_out_button}
+                                        onPress={handleDeleteAccount}
+                                        activeOpacity={0.7}
+                                        disabled={deleting}
+                                    >
+                                        <FontAwesomeIcon
+                                            icon={faTrashCan}
+                                            size={14}
+                                            color={theme.danger}
+                                        />
+                                        <Text style={styles.sign_out_text}>
+                                            {deleting ? 'Deleting...' : 'Delete account'}
+                                        </Text>
+                                    </TouchableOpacity>
+                                </>
                             ) : (
                                 <TouchableOpacity
                                     style={styles.sign_out_button}
@@ -597,9 +692,9 @@ export default function ProfileScreen() {
 
                         <ReadingHistory />
 
-                        <BlockedSources />
+                        <BlockedSources key={`sources-${sectionsKey}`} />
 
-                        <GenrePreferences />
+                        <GenrePreferences key={`interests-${sectionsKey}`} />
                     </ScrollView>
                 </SafeAreaView>
             </SafeAreaProvider>

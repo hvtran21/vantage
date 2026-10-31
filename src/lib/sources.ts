@@ -214,3 +214,13 @@ export async function replaceLocalBlocklist(token?: string | null): Promise<bool
         return false;
     }
 }
+
+/**
+ * Empties the device's blocklist without touching the network, for when the
+ * server side is known to be gone -- the result replaceLocalBlocklist would
+ * leave after an empty response. Throws on a local write failure.
+ */
+export async function clearLocalBlocklist(): Promise<void> {
+    const db = await getDb();
+    await db.runAsync('DELETE FROM blocked_sources');
+}

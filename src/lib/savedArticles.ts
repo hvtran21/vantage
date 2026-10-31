@@ -115,3 +115,13 @@ export async function replaceLocalSavedArticles(token?: string | null): Promise<
         return false;
     }
 }
+
+/**
+ * Unsaves everything on the device without touching the network, for when the
+ * server side is known to be gone -- the result replaceLocalSavedArticles would
+ * leave after an empty response. Throws on a local write failure.
+ */
+export async function clearLocalSavedArticles(): Promise<void> {
+    const db = await getDb();
+    await db.runAsync('UPDATE articles SET saved = 0, save_synced = 1');
+}
