@@ -20,10 +20,8 @@ external calls, migrations, concurrency. Point at files and lines. -->
 
 ## Cross-repo impact
 
-<!-- Vantage is three repos: vantage (Expo app) calls vantage-api (Express), which reads the
-`content` views rss-aggregator (Python) writes to Postgres. Does this change a contract one of
-the others depends on: an endpoint, a request or response shape, a view, a column, a role?
-Name the companion PR, or write "None". -->
+<!-- Does this change a contract another repo depends on: an endpoint, or a request or response
+shape? Link the companion PR, or write "None". -->
 
 ## Testing
 
