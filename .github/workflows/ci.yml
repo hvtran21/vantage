@@ -49,3 +49,9 @@ jobs:
       - name: Lint
         if: ${{ !cancelled() && steps.install.outcome == 'success' }}
         run: npx eslint .
+
+      - name: Expo dependency check
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        env:
+          EXPO_OFFLINE: 1
+        run: npx expo install --check
