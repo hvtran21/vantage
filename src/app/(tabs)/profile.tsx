@@ -25,11 +25,19 @@ import {
 import {
     listBlocked,
     listReportedDomains,
+    replaceLocalBlocklist,
     syncBlockedSources,
     unblockSource,
     type BlockedSource,
 } from '@/lib/sources';
-import { getInterests, addInterest, removeInterest, syncInterests } from '@/lib/interests';
+import {
+    getInterests,
+    addInterest,
+    removeInterest,
+    syncInterests,
+    replaceLocalInterests,
+} from '@/lib/interests';
+import { replaceLocalSavedArticles } from '@/lib/savedArticles';
 import { clearReadHistory, countReadArticles } from '@/lib/readState';
 import { deleteAccount } from '@/lib/account';
 import { useMotion } from '@/components/Motion';
@@ -534,6 +542,7 @@ export default function ProfileScreen() {
     const isSignedIn = !!user;
     const swipeGesture = useSwipeTabGesture('profile');
     const [deleting, setDeleting] = useState(false);
+    const deletingRef = useRef(false);
 
     const handleSignOut = async () => {
         haptics.light();
@@ -548,32 +557,57 @@ export default function ProfileScreen() {
     };
 
     const handleConfirmDeleteAccount = async () => {
+        // A ref, not `deleting`: state lags a render, and stacked confirm dialogs can both fire.
+        if (deletingRef.current) return;
+        deletingRef.current = true;
         haptics.warning();
         setDeleting(true);
-        const token = await getToken().catch(() => null);
-        if (!token || !(await deleteAccount(token))) {
-            setDeleting(false);
+        try {
+            const token = await getToken().catch(() => null);
+            const status = token ? await deleteAccount(token) : null;
+            if (status === 204) {
+                // Clerk already deleted the user, so this can throw -- the device still has to sign out.
+                try {
+                    await signOut();
+                } catch (error) {
+                    console.warn('[profile] sign-out after account deletion failed:', error);
+                }
+                await AsyncStorage.removeItem('skippedAuth');
+                router.replace('/sign-in');
+                return;
+            }
+            if (token && status === 502) {
+                Alert.alert(
+                    "Couldn't close account",
+                    "Your data was removed, but your account couldn't be closed. Please try again.",
+                );
+                // The server data is gone, so re-pull the device's mirrors. Sequential, not
+                // Promise.all: the first two each open a SQLite transaction on the single shared
+                // connection, and expo-sqlite can't run two at once.
+                try {
+                    await replaceLocalBlocklist(token);
+                    await replaceLocalSavedArticles(token);
+                    await replaceLocalInterests(token);
+                } catch (error) {
+                    console.warn('[profile] local refresh after partial deletion failed:', error);
+                }
+                return;
+            }
             Alert.alert(
                 "Couldn't delete account",
                 'Your account is still active. Please try again.',
             );
-            return;
+        } finally {
+            deletingRef.current = false;
+            setDeleting(false);
         }
-        // Clerk already deleted the user, so this can throw -- the device still has to sign out.
-        try {
-            await signOut();
-        } catch (error) {
-            console.warn('[profile] sign-out after account deletion failed:', error);
-        }
-        await AsyncStorage.removeItem('skippedAuth');
-        router.replace('/sign-in');
     };
 
     const handleDeleteAccount = () => {
         haptics.light();
         Alert.alert(
             'Delete account?',
-            "This permanently deletes your account and everything synced to it: saved articles, blocked sources, and interests. It can't be undone. You can keep using the app signed out.",
+            "This permanently deletes your account and everything synced to it: saved articles, blocked sources, reports, and interests. It can't be undone. You can keep using the app signed out.",
             [
                 { text: 'Cancel', style: 'cancel' },
                 { text: 'Delete', style: 'destructive', onPress: handleConfirmDeleteAccount },
