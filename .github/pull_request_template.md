@@ -2,7 +2,12 @@
 
 <!-- What changes and why, in a few sentences. -->
 
-## Review focus
+## Description of changes
+
+<!-- What changed, in more detail: behaviour, data, contracts, and any decisions or trade-offs
+behind them. -->
+
+## What to review
 
 <!-- Where review attention matters most and why: auth, data deletion or mutation, transactions,
 external calls, migrations, concurrency. Point at files and lines. -->
