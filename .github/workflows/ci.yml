@@ -50,8 +50,6 @@ jobs:
         if: ${{ !cancelled() && steps.install.outcome == 'success' }}
         run: npx eslint .
 
-      # Fails when an installed package drifts from the versions this Expo SDK supports. Offline
-      # mode checks against the table bundled with expo, so the result doesn't depend on Expo's API.
       - name: Expo dependency check
         if: ${{ !cancelled() && steps.install.outcome == 'success' }}
         env:
