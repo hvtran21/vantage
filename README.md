@@ -3,9 +3,19 @@
 Just the headlines that matter. A cross-platform mobile app for discovering technology news: browse by genre, save articles for later, and read the rest in your browser.
 
 <p align="center">
-  <img src="screenshots/feed.png" width="260" alt="Feed screen" />
-  <img src="screenshots/profile.png" width="260" alt="Profile screen" />
-  <img src="screenshots/saved.png" width="260" alt="Saved screen" />
+  <img width="398" height="884" alt="image" src="https://github.com/user-attachments/assets/051b8751-feaf-4810-931a-e62b608e2cf8" />
+
+  <img width="398" height="884" alt="image" src="https://github.com/user-attachments/assets/9e68216b-d22a-440a-ad2d-b44113b2ef9b" />
+
+  <img width="398" height="884" alt="image" src="https://github.com/user-attachments/assets/a9725fb0-3f25-4a5a-9ea3-49a40d565b94" />
+  
+  <img width="398" height="884" alt="image" src="https://github.com/user-attachments/assets/c26e1fdf-9bac-4069-bbe6-3159b1821be2" />
+
+  <img width="398" height="884" alt="image" src="https://github.com/user-attachments/assets/4d7b5bdc-51f1-40e7-ba71-4a52af1356b2" />
+
+  <img width="398" height="884" alt="image" src="https://github.com/user-attachments/assets/85cdc6ef-0b49-4186-a5c7-eec828ab1c82" />
+
+  
 </p>
 
 ---
